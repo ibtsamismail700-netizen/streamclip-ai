@@ -1,8 +1,10 @@
 // StreamClip AI — Live Now results page.
-// A static site has no server and no YouTube Data API key, so it cannot pull
-// YouTube's real live list. This page therefore never fabricates streams: its
-// main action opens YouTube's own live search for the category (new tab),
-// and a pasted stream link hands off to the Stream Clipper like the home hero.
+// On load it asks the site's own /api/live function for YouTube's real live
+// list for this category (the API key stays server-side) and renders real
+// stream cards. If that function is not configured or YouTube is unavailable,
+// it falls back to the honest design below: a button opening YouTube's own
+// live search for the category (new tab). Streams are never fabricated, and
+// a pasted stream link hands off to the Stream Clipper like the home hero.
 import { toast } from './site.js';
 
 const $ = (id) => document.getElementById(id);
@@ -33,6 +35,71 @@ $('lncat2').textContent = name;
 const yt = $('ytbtn');
 yt.href = `https://www.youtube.com/results?search_query=${encodeURIComponent(name + ' live')}&sp=EgJAAQ%253D%253D`;
 yt.textContent = `See who is live in ${name} on YouTube`;
+
+/* ---------- real live list from /api/live, fallback design on any failure ---------- */
+const loadingEl = $('lnloading');
+const listEl = $('lnstreams');
+const fallbackEl = $('lnfallback');
+
+function showFallback() {
+  loadingEl.hidden = true;
+  listEl.hidden = true;
+  fallbackEl.hidden = false;
+}
+
+function fmtWatching(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) return 'Live now';
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1).replace(/\.0$/, '')}M watching`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K watching`;
+  return `${n} watching`;
+}
+
+function renderStreams(streams) {
+  listEl.innerHTML = '';
+  for (const s of streams) {
+    const a = document.createElement('a');
+    a.className = 'live-row';
+    a.href = s.url || `https://www.youtube.com/watch?v=${s.id || ''}`;
+    a.target = '_blank';
+    a.rel = 'noopener';
+
+    const th = document.createElement('div');
+    th.className = 'live-th';
+    if (s.thumbnail) th.style.backgroundImage = `url("${s.thumbnail}")`;
+    const tag = document.createElement('span');
+    tag.className = 'tag live';
+    tag.textContent = 'LIVE';
+    th.appendChild(tag);
+
+    const tx = document.createElement('div');
+    tx.className = 'live-tx';
+    const b = document.createElement('b');
+    b.textContent = s.title || 'Live stream';
+    const who = document.createElement('span');
+    who.className = 'who';
+    who.textContent = s.channel || '';
+    const watch = document.createElement('span');
+    watch.className = 'watch';
+    watch.textContent = fmtWatching(s.viewers);
+    tx.append(b, who, watch);
+
+    a.append(th, tx);
+    listEl.appendChild(a);
+  }
+}
+
+(async () => {
+  if (!slug) { showFallback(); return; }
+  try {
+    const r = await fetch(`/api/live?cat=${encodeURIComponent(slug)}`);
+    if (!r.ok) throw new Error(`api ${r.status}`);
+    const d = await r.json();
+    if (!d || !Array.isArray(d.streams) || !d.streams.length) throw new Error('no streams');
+    renderStreams(d.streams);
+    loadingEl.hidden = true;
+    listEl.hidden = false;
+  } catch { showFallback(); }
+})();
 
 /* ---------- paste a stream link -> Stream Clipper (same handoff as home) ---------- */
 const link = $('lnlink');

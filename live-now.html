@@ -21,10 +21,21 @@
 <div class="t"><h2 id="lntitle">Live now</h2><p class="dim small">Live right now</p></div>
 </div>
 
+<div class="card mt2" id="lnloading">
+<div class="spread"><h3>Live right now</h3><span class="tag live">LIVE</span></div>
+<p class="sub mt" id="lnloadmsg">Finding who is live…</p>
+</div>
+
+<div class="live-list" id="lnstreams" hidden></div>
+
+<div id="lnfallback" hidden>
 <div class="card mt2">
 <div class="spread"><h3 id="lnhead">Live right now</h3><span class="tag live">LIVE</span></div>
 <p class="sub mt">These streams are happening on YouTube right now. StreamClip AI runs fully in your browser — there is no server here pulling YouTube's live list, and this page will not invent one. The button opens YouTube's own live results for <b id="lncat1">this category</b> in a new tab: the real streamers, titles and viewer counts, always current.</p>
 <a class="btn block big mt" id="ytbtn" href="https://www.youtube.com/results?search_query=live" target="_blank" rel="noopener">See who is live on YouTube</a>
+</div>
+
+<div class="note"><div><b>Why no stream list on this page?</b><div class="small dim">A static website has no server and no YouTube Data API key, so it cannot fetch YouTube's real-time live list. Rather than showing made-up streamer names or viewer counts, we send you straight to YouTube's live search for <span id="lncat2">this category</span> — then bring the link back here to clip it.</div></div></div>
 </div>
 
 <div class="card">
@@ -36,8 +47,6 @@
 </div>
 <button class="btn dark block mt" id="lnclip">Clip this stream</button>
 </div>
-
-<div class="note"><div><b>Why no stream list on this page?</b><div class="small dim">A static website has no server and no YouTube Data API key, so it cannot fetch YouTube's real-time live list. Rather than showing made-up streamer names or viewer counts, we send you straight to YouTube's live search for <span id="lncat2">this category</span> — then bring the link back here to clip it.</div></div></div>
 </div>
 <footer class="site-foot"><div class="in">
 <div class="cols"><div><h4>Creator tools</h4><a href="tools/stream-clipper.html">Stream Clipper</a><a href="tools/thumbnail-creator.html">Thumbnail Creator</a><a href="tools/upload-video.html">Upload Your Own Video</a><a href="tools/caption-translation.html">Caption Translation</a><a href="tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="tools/your-branding.html">Your Own Branding</a></div><div><h4>Student Mode</h4><a href="tools/lecture-clips.html">Lecture to Revision Clips</a><a href="tools/lecture-notes.html">Lecture to Notes</a><a href="tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="tools/presentation-maker.html">Video Presentation Maker</a></div><div><h4>Site</h4><a href="settings.html">Settings — Add your Gemini key</a><a href="about.html">About</a><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms</a><a href="contact.html">Contact</a></div></div>
