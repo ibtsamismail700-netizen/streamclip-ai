@@ -12,6 +12,11 @@ const BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
 const FALLBACK_MODELS = {
   text: ['gemini-3.8-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash-lite'],
   parts: ['gemini-3.8-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash-lite'],
+  // Bulk text work (briefs, hooks batches, caption chunks, transcript
+  // scoring) runs LITE-first: lite models carry much higher free quotas,
+  // and this work is quality-tolerant. Quality-critical single calls keep
+  // the flagship-first 'text' order.
+  bulk: ['gemini-2.5-flash-lite', 'gemini-3.8-flash', 'gemini-3-flash-preview'],
   image: ['gemini-2.5-flash-image'],
   tts: ['gemini-2.5-flash-preview-tts'],
 };
@@ -77,13 +82,26 @@ function classifyModels(list) {
   ];
   for (const tier of tiers) for (const n of tier) if (!picked.includes(n)) picked.push(n);
   const text = picked.slice(0, 3);
+  // Bulk set: the same flash pool, but LITE models first (newest lite,
+  // then the known high-quota lite, then any lite), with the flagship
+  // order as backfill when the key has few or no lite models.
+  const lite = flash.filter(n => n.includes('lite'));
+  const bulkPicked = [];
+  const bulkTiers = [
+    lite.filter(n => n.startsWith('gemini-3')),
+    lite.filter(n => n === 'gemini-2.5-flash-lite'),
+    lite,
+    ...tiers,
+  ];
+  for (const tier of bulkTiers) for (const n of tier) if (!bulkPicked.includes(n)) bulkPicked.push(n);
+  const bulk = bulkPicked.slice(0, 3);
   // Image: anything with "image" in the name (Nano Banana family); the
   // everyday (non-Pro) model first when both exist.
   const imageAll = names.filter(n => n.includes('image'));
   const image = [...imageAll.filter(n => !n.includes('pro')), ...imageAll.filter(n => n.includes('pro'))].slice(0, 4);
   // TTS: anything with "tts" in the name.
   const tts = names.filter(n => n.includes('tts')).slice(0, 2);
-  return { text, parts: text, image, tts };
+  return { text, parts: text, bulk, image, tts };
 }
 
 async function resolveModelSets(key) {
@@ -99,7 +117,7 @@ async function resolveModelSets(key) {
         new Promise((_, rej) => setTimeout(() => rej(new Error('model list timeout')), 10000)),
       ]);
       const sets = classifyModels(list);
-      for (const kind of ['text', 'parts', 'image', 'tts']) {
+      for (const kind of ['text', 'parts', 'bulk', 'image', 'tts']) {
         if (!sets[kind] || !sets[kind].length) sets[kind] = FALLBACK_MODELS[kind];
       }
       writeModelCache(tag, sets);
@@ -113,10 +131,17 @@ async function resolveModelSets(key) {
   return p;
 }
 
-/** Model names of one kind ('text' | 'parts' | 'image' | 'tts') for these keys. */
+/** Model names of one kind ('text' | 'parts' | 'bulk' | 'image' | 'tts') for these keys. */
 async function modelsFor(keys, kind) {
   const sets = await resolveModelSets(keys[0]);
-  return sets[kind] && sets[kind].length ? sets[kind] : FALLBACK_MODELS[kind];
+  if (sets[kind] && sets[kind].length) return sets[kind];
+  // Model sets cached before the bulk set existed have no 'bulk': derive
+  // it from the cached text set, lite models first.
+  if (kind === 'bulk' && sets.text && sets.text.length) {
+    const lite = sets.text.filter(n => n.includes('lite'));
+    if (lite.length) return [...lite, ...sets.text.filter(n => !n.includes('lite'))];
+  }
+  return FALLBACK_MODELS[kind];
 }
 
 export const getKeys = () => {
@@ -171,18 +196,22 @@ const isRetiredModel = (e) => !!e && (e.status === 400 || e.status === 404) && /
 const ATTEMPT_TIMEOUT_MS = 25000;
 const TOTAL_BUDGET_MS = 75000;
 
-/** Google's own suggested wait after a 429, in ms (0 when it gives none). */
-function googleRetryMs(e, capMs = 30000) {
+/** Google's own suggested wait after a 429, in SECONDS, uncapped (0 when it gives none). */
+function rawRetrySec(e) {
   const details = e?.body?.error?.details || [];
   for (const d of details) {
     if (d && /RetryInfo/.test(d['@type'] || '') && d.retryDelay != null) {
       const s = parseFloat(d.retryDelay);
-      if (Number.isFinite(s)) return Math.min(capMs, Math.ceil(s * 1000));
+      if (Number.isFinite(s)) return s;
     }
   }
   const m = /retry in ([\d.]+)\s*s/i.exec(e?.message || '');
-  if (m) return Math.min(capMs, Math.ceil(parseFloat(m[1]) * 1000));
-  return 0;
+  return m ? parseFloat(m[1]) : 0;
+}
+/** Google's own suggested wait after a 429, in ms (0 when it gives none). */
+function googleRetryMs(e, capMs = 30000) {
+  const s = rawRetrySec(e);
+  return s > 0 ? Math.min(capMs, Math.ceil(s * 1000)) : 0;
 }
 
 /* ---------------- Quota cooldown map ----------------
@@ -265,14 +294,46 @@ export function getKeyRestInfo() {
 
 /** A quota / rate-limit failure, however Google phrases it. */
 const isQuotaError = (e) => !!e && (e.status === 429 || e.body?.error?.status === 'RESOURCE_EXHAUSTED' || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(e.message || ''));
+/* A DAILY quota is a different beast from a per-minute one: the key is
+ * done until tomorrow, so retrying the pair is pointless and the user
+ * deserves a truthful message. Google signals it three ways: the
+ * QuotaFailure detail names a per-day quota (quotaId "…PerDay…"), the
+ * wording mentions a day/daily limit, or the RetryInfo delay runs to
+ * many hours (the quota resets at midnight Pacific). */
+const DAILY_COOLDOWN_CAP_MS = 6 * 60 * 60 * 1000; // stored rest for a daily hit, capped at 6h
+function isDailyQuota(e) {
+  if (!isQuotaError(e)) return false;
+  let hay = String(e.message || '');
+  try { hay += ' ' + JSON.stringify(e.body || {}); } catch { /* body is best-effort */ }
+  if (/per.?day|daily/i.test(hay)) return true;
+  return rawRetrySec(e) > 3 * 3600;
+}
 /** How long a rate-limited pair rests: Google's own delay when given. */
 function cooldownMsFor(e) {
+  if (isDailyQuota(e)) {
+    // Rest until tomorrow-ish (Google's own delay when it gave one),
+    // capped at 6 hours so the stored cooldown stays sane.
+    const raw = rawRetrySec(e) * 1000;
+    return raw > 0 ? Math.min(raw, DAILY_COOLDOWN_CAP_MS) : DAILY_COOLDOWN_CAP_MS;
+  }
   const g = googleRetryMs(e, 120000);
   if (g > 0) return g;
   return e && e.status === 503 ? 30000 : 60000;
 }
 
-const LIMIT_MESSAGE = 'Your free Gemini limit is used up for now. Wait a little, or add another key in Settings.';
+/* The final limit error tells the TRUTH about which limit was hit: a
+ * finished daily quota (resets tomorrow) is not the same as a per-minute
+ * one (a short wait fixes it). Google's real message rides along on the
+ * error (googleMessage) for any card that wants to show it. */
+const DAILY_LIMIT_MESSAGE = "Today's free limit on this key is finished — it resets tomorrow. Add another key in Settings to keep working now.";
+const MINUTE_LIMIT_MESSAGE = 'Free limit reached — wait a minute, or add another key in Settings.';
+function limitErrorFor(e, dailyHint = false) {
+  const daily = e ? isDailyQuota(e) : dailyHint;
+  const err = new Error(daily ? DAILY_LIMIT_MESSAGE : MINUTE_LIMIT_MESSAGE);
+  err.dailyQuota = daily;
+  if (e) { err.googleMessage = e.message || ''; err.status = e.status || 429; }
+  return err;
+}
 const REST_CAP_MS = 65000;
 /**
  * When EVERY pair in `pairs` is cooling, wait ONCE for the earliest reset
@@ -281,13 +342,18 @@ const REST_CAP_MS = 65000;
  * or -1 when the earliest reset is beyond the honest cap (the caller then
  * throws the limit error rather than parking the user).
  */
-async function restForEarliestReset(pairs, onRetry, info = {}) {
+/** Ms until the soonest pair in `pairs` can answer again (0 when none is resting). */
+function earliestRestMs(pairs) {
   let earliest = Infinity;
   for (const [model, key] of pairs) {
     const left = cooldownLeft(key, model);
     if (left > 0 && left < earliest) earliest = left;
   }
-  if (!Number.isFinite(earliest)) return 0;
+  return Number.isFinite(earliest) ? earliest : 0;
+}
+async function restForEarliestReset(pairs, onRetry, info = {}) {
+  const earliest = earliestRestMs(pairs);
+  if (!earliest) return 0;
   if (earliest > REST_CAP_MS) return -1;
   if (onRetry) {
     const waitSec = Math.max(1, Math.ceil(earliest / 1000));
@@ -338,7 +404,12 @@ async function callWithRotation({ models, keys, timeoutMs = ATTEMPT_TIMEOUT_MS, 
       if (resting.length && !rested) {
         rested = true;
         const waited = await restForEarliestReset(resting, onRetry);
-        if (waited < 0) throw new Error(LIMIT_MESSAGE);
+        if (waited < 0) {
+          // The soonest reset is beyond the honest wait cap. Say which
+          // limit it really is: this call's own quota error when there is
+          // one, else a pair resting for many hours means today's quota.
+          throw limitErrorFor(rateError || last, earliestRestMs(resting) > 10 * 60 * 1000);
+        }
         deadline += waited; // the wait is not part of the attempt budget
         continue;
       }
@@ -387,7 +458,7 @@ async function callWithRotation({ models, keys, timeoutMs = ATTEMPT_TIMEOUT_MS, 
     if (rested && Date.now() >= deadline) break;
   }
   if (last) {
-    if (isRateLimit(last) || isQuotaError(last)) throw new Error(LIMIT_MESSAGE);
+    if (isRateLimit(last) || isQuotaError(last)) throw limitErrorFor(last);
     if (last.name === 'AbortError') throw new Error('Google took too long to answer. Check your connection and try again.');
     throw new Error(`${failPrefix}: ${last.message}`);
   }
@@ -398,11 +469,17 @@ async function callWithRotation({ models, keys, timeoutMs = ATTEMPT_TIMEOUT_MS, 
   throw new Error(emptyMessage);
 }
 
-/** Text (and optional inline parts) call with key + model rotation. Returns text. */
-export async function geminiText(prompt, { json = false, parts = [], temperature = 0.6, onRetry = null } = {}) {
+/**
+ * Text (and optional inline parts) call with key + model rotation. Returns text.
+ * `bulk: true` marks high-volume, quality-tolerant work (briefs, hooks
+ * batches, caption chunks, transcript scoring): it resolves LITE models
+ * first, whose free quotas are far higher. Leave it off for
+ * quality-critical single calls (notes, exam answers, analysis).
+ */
+export async function geminiText(prompt, { json = false, parts = [], temperature = 0.6, onRetry = null, bulk = false } = {}) {
   const keys = getKeys();
   if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
-  const models = await modelsFor(keys, 'text');
+  const models = await modelsFor(keys, bulk ? 'bulk' : 'text');
   return callWithRotation({
     models, keys, timeoutMs: 60000, onRetry,
     makeBody: () => {
@@ -543,6 +620,16 @@ export async function geminiImage(prompt, imagePart = null, aspectRatio = null, 
   if (hard) throw new Error(`Image model error: ${hard.err.status ? `HTTP ${hard.err.status} — ` : ''}${hard.err.message} (model: ${hard.model})`);
   const softF = failures.find(f => f.soft);
   if (softF) throw new Error(`Image model error: ${softF.soft} (model: ${softF.model})`);
+  // A daily-quota failure gets the truthful daily message, not a raw 429:
+  // the pair was marked cooling for hours on the spot, so it was never
+  // retried inside this call either.
+  const dailyF = failures.find(f => f.err && isDailyQuota(f.err));
+  if (dailyF) {
+    const err = new Error(`Image model error: ${DAILY_LIMIT_MESSAGE} (model: ${dailyF.model})`);
+    err.googleMessage = dailyF.err.message || '';
+    err.dailyQuota = true;
+    throw err;
+  }
   const rate = failures.find(f => f.err);
   if (rate) throw new Error(`Image model error: HTTP ${rate.err.status || 429} — ${rate.err.message} (model: ${rate.model})`);
   throw new Error('Image model error: no image model on your key answered. Open Settings and refresh the model list, or add another key.');
@@ -555,10 +642,10 @@ export const GEMINI_VOICES = ['Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir', 'Led
  * General call with arbitrary content parts (text, inlineData, fileData…)
  * and key + model rotation. Returns the model's text.
  */
-export async function geminiParts(parts, { json = false, temperature = 0.5, models = null, timeoutMs = 120000, onRetry = null } = {}) {
+export async function geminiParts(parts, { json = false, temperature = 0.5, models = null, timeoutMs = 120000, onRetry = null, bulk = false } = {}) {
   const keys = getKeys();
   if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
-  const useModels = models && models.length ? models : await modelsFor(keys, 'parts');
+  const useModels = models && models.length ? models : await modelsFor(keys, bulk ? 'bulk' : 'parts');
   return callWithRotation({
     models: useModels, keys, timeoutMs, onRetry,
     makeBody: () => {

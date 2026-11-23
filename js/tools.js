@@ -27,7 +27,7 @@ const retryNote = (btn, el) => (info) => {
  * task is never paced — it fires instantly — and the progress ring keeps
  * advancing, so the breather reads as steady work, not a hang. */
 const pace = (ms) => new Promise((r) => setTimeout(r, ms));
-const hitLimit = (e) => !!e && /limit is used up|quota|429|rate/i.test(e.message || '');
+const hitLimit = (e) => !!e && /free limit|limit reached|quota|429|rate/i.test(e.message || '');
 const breather = (prevErr) => pace(prevErr && hitLimit(prevErr) ? 8000 : 2000);
 /* ---------- Job progress ring (shared, AlphaPost-style) ----------
  * Honest progress only: the % is steps completed plus a within-step
@@ -416,7 +416,7 @@ if (tool === 'hooks') {
     try {
       const d = await geminiJson(`You are a viral short-form content strategist. Topic: "${topic}". Platform: ${$('platform').value}. Tone: ${toneVal}. Hook style: ${$('hstyle').value}. Language: ${$('hlang').value}.
 Return JSON only: {"hooks":["..."],"titles":["..."],"hashtags":["..."]}
-Give exactly ${n} hooks (3-7 punchy words each, all in the chosen hook style, no emojis), ${Math.max(4, n - 2)} titles (max 60 characters each), ${n} hashtags (no # symbol, single words or short phrases). Write hooks and titles in the chosen language.`, { onRetry: retryNote(b) });
+Give exactly ${n} hooks (3-7 punchy words each, all in the chosen hook style, no emojis), ${Math.max(4, n - 2)} titles (max 60 characters each), ${n} hashtags (no # symbol, single words or short phrases). Write hooks and titles in the chosen language.`, { bulk: true, onRetry: retryNote(b) });
       const hooks = d.hooks || [], titles = d.titles || [], tags = (d.hashtags || []).map(h => '#' + String(h).replace(/\s+/g, ''));
       out('result', `
         <div class="outcard"><div class="spread"><b>Hooks — say one in the first 2 seconds</b><button class="chip" id="ch">Copy hooks</button></div><ol>${hooks.map(h => `<li>${esc(h)}</li>`).join('')}</ol></div>
@@ -455,7 +455,7 @@ if (tool === 'translate') {
       for (let i = 0; i < chunks.length; i++) {
         if (i > 0) await breather(null); // pacing: space the chunk calls out
         if (st) st.textContent = chunks.length > 1 ? `Translating part ${i + 1} of ${chunks.length}…` : 'Translating…';
-        parts.push(await geminiText(`Translate these video captions from ${$('sfrom').value} into ${$('lang').value}. Style: ${$('tstyle').value}. Caption formatting: ${SRT_STYLE[$('srtstyle').value] || SRT_STYLE['Clean full lines']} Keep every timestamp exactly as it is. Translate only the spoken words. Do not add explanations, do not wrap in code fences.\n\n${chunks[i]}`, { temperature: 0.3, onRetry: retryNote(b, st) }));
+        parts.push(await geminiText(`Translate these video captions from ${$('sfrom').value} into ${$('lang').value}. Style: ${$('tstyle').value}. Caption formatting: ${SRT_STYLE[$('srtstyle').value] || SRT_STYLE['Clean full lines']} Keep every timestamp exactly as it is. Translate only the spoken words. Do not add explanations, do not wrap in code fences.\n\n${chunks[i]}`, { bulk: true, temperature: 0.3, onRetry: retryNote(b, st) }));
       }
       const r = parts.join('\n\n');
       const styleName = $('srtstyle').value;
@@ -828,6 +828,7 @@ if (tool === 'thumbnail') {
 {"topic":"what the video is about","textOnThumbnail":"ALL the text written on the thumbnail, word for word","headlineLines":["ONLY the 1-3 MAIN headline lines — the biggest, boldest words a viewer reads first, each line exactly as written"],"otherText":"every other word on the thumbnail that is NOT part of the headline (small print, form labels, button text, codes), or an empty string","subject":"the main subject/face/object","works":["what works, short"],"weak":["what is weak, short"],"directions":["4 redesign directions that look completely different from each other but keep the SAME headline text"]}` }], { temperature: 0.4, onRetry: retryNote(b) });
       analysis = d;
       for (const k of Object.keys(briefCache)) delete briefCache[k]; // new analysis — old designer briefs no longer apply
+      briefBatchFor = null; // the batched briefs are refetched for the new analysis
       briefsBroken = false; // and brief generation gets a fresh chance
       // The text field defaults to the HEADLINE lines only (1-3 short
       // lines). The rest of the thumbnail's text is analysis information,
@@ -921,41 +922,61 @@ Art direction: ${st.dir}.${extra ? ` Creative direction: ${extra}.` : ''}
 The thumbnail must show this EXACT text, word for word, spelled exactly, in huge bold letters that dominate the design: "${text}"
 High contrast, dramatic, instantly readable at small size, professional YouTube thumbnail style, no watermark.`;
   };
-  // Designer briefs: before any image is generated, a text call writes a
-  // proper graphic-designer brief for that version (scene, subject, palette,
-  // composition, text placement + hierarchy) from the stored analysis, and
-  // the image model then designs to the brief. Briefs are cached per style
-  // (+ text + topic) so regenerating versions does not redo them.
-  const briefCache = {};
-  // If a designer-brief call fails or stalls once, briefs are skipped for
-  // the rest of the run: six slow text calls must never eat the time and
-  // quota the actual image generation needs.
+  // Designer briefs: before any image is generated, ONE text call writes a
+  // proper graphic-designer brief for EVERY version at once (scene, subject,
+  // palette, composition, text placement + hierarchy per style) from the
+  // stored analysis, and the image model then designs to its brief. The old
+  // flow spent one text call PER version — six calls before the first image
+  // existed — which burned a free key's per-minute quota for nothing. One
+  // batched call (on a lite model, via bulk) now does the whole set. Briefs
+  // are cached per analysis + text, so regenerating versions redoes nothing.
+  const briefCache = {}; // style name -> brief text
+  // If the brief call fails or stalls once, briefs are skipped for the rest
+  // of the run: a slow text call must never eat the time and quota the
+  // actual image generation needs.
   let briefsBroken = false;
-  async function designerBrief(st, i, text) {
-    const extra = (analysis?.directions || [])[i] || '';
-    const key = `${i}|${text}|${analysis?.topic || ''}|${extra}`;
-    if (briefCache[key]) return briefCache[key];
-    const brief = await geminiText(`You are a senior graphic designer. Write a short DESIGNER BRIEF (5-7 lines, plain text, no headings, no bullet points) for ONE version of a YouTube thumbnail. Cover exactly: the scene/background, the main visual subject and how it is shown, the colour palette (name 3-4 colours), the composition/layout, and where the big text sits with its hierarchy (which words are biggest).
+  let briefBatchFor = null; // analysis+text key the batched briefs were fetched for
+  /** Split a batched-briefs reply into per-style briefs (null when unusable). */
+  function parseBriefBatch(d, names) {
+    if (!d || typeof d !== 'object') return null;
+    const out = {};
+    for (const name of names) {
+      const v = d[name];
+      if (typeof v === 'string' && v.trim()) out[name] = v.trim();
+    }
+    return Object.keys(out).length ? out : null;
+  }
+  async function ensureBriefs(text) {
+    const bk = `${text}|${analysis?.topic || ''}|${(analysis?.directions || []).join('~')}`;
+    if (briefBatchFor === bk) return; // already attempted for this analysis + text
+    briefBatchFor = bk;
+    try {
+      const list = varStyles.map((st, i) => {
+        const extra = (analysis?.directions || [])[i] || '';
+        return `- "${st.name}": ${st.dir}${extra ? ` Creative direction: ${extra}.` : ''}`;
+      }).join('\n');
+      // Hard 30s ceiling on the one batch call: if it fails or stalls,
+      // generation proceeds with the direct prompts instead.
+      const d = await Promise.race([
+        geminiJson(`You are a senior graphic designer. For EACH of the ${varStyles.length} versions below of a YouTube thumbnail for the same video, write a short DESIGNER BRIEF (5-7 lines, plain text, no headings, no bullet points inside a brief). Each brief must cover exactly: the scene/background, the main visual subject and how it is shown, the colour palette (name 3-4 colours), the composition/layout, and where the big text sits with its hierarchy (which words are biggest). Every design must be a completely new, original composition — never a copy of any existing thumbnail's layout.
 Video topic: ${analysis?.topic || 'not specified'}
 Main subject: ${analysis?.subject || 'the topic itself'}
-Exact text that will appear on the thumbnail: "${text}"
-Art direction for this version: ${st.dir}${extra ? `\nCreative direction: ${extra}` : ''}
-The design must be a completely new, original composition — never a copy of any existing thumbnail's layout.`, { temperature: 0.7 });
-    if (brief) briefCache[key] = brief;
-    return brief;
+Exact text that will appear on every thumbnail: "${text}"
+Versions:
+${list}
+Return JSON only, keyed by the exact version names: {${varStyles.map(st => `"${st.name}": "brief…"`).join(', ')}}`, { bulk: true, temperature: 0.7 }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('brief timeout')), 30000)),
+      ]);
+      const briefs = parseBriefBatch(d, varStyles.map(st => st.name));
+      if (!briefs) throw new Error('brief batch unreadable');
+      for (const st of varStyles) if (briefs[st.name]) briefCache[st.name] = briefs[st.name];
+    } catch { briefsBroken = true; } // one failure ends briefs for this run
   }
   async function versionPrompt(st, i, text) {
     if (!briefsBroken) {
-      try {
-        // Hard 20s ceiling on the brief: if it fails or stalls, generation
-        // proceeds with the direct prompt instead of waiting on text calls.
-        const brief = await Promise.race([
-          designerBrief(st, i, text),
-          new Promise((_, rej) => setTimeout(() => rej(new Error('brief timeout')), 20000)),
-        ]);
-        if (!brief) throw new Error('empty brief');
-        return `Design this YouTube thumbnail exactly to the following designer brief:\n${brief}\n\nThe thumbnail must show this EXACT text, word for word, spelled exactly, in huge bold letters that dominate the design: "${text}"\nProfessional YouTube thumbnail designed by a graphic designer — bold, high contrast, instantly readable at small size, full-frame original artwork edge to edge, no watermark.`;
-      } catch { briefsBroken = true; } // one failure ends briefs for this run
+      await ensureBriefs(text); // one batched call on the first version, then cache
+      const brief = briefCache[st.name];
+      if (brief) return `Design this YouTube thumbnail exactly to the following designer brief:\n${brief}\n\nThe thumbnail must show this EXACT text, word for word, spelled exactly, in huge bold letters that dominate the design: "${text}"\nProfessional YouTube thumbnail designed by a graphic designer — bold, high contrast, instantly readable at small size, full-frame original artwork edge to edge, no watermark.`;
     }
     return redesignPrompt(st, i, text); // the brief is an enhancement — never block generation
   }
@@ -987,7 +1008,7 @@ The design must be a completely new, original composition — never a copy of an
           // First a designer brief is written for this version (cached), so
           // the image model designs like a graphic designer, not a guesser.
           const stline = card.querySelector('.stline');
-          if (stline) stline.textContent = 'Writing the designer brief…';
+          if (stline) stline.textContent = i === 0 ? 'Writing the designer briefs (one call for all versions)…' : 'Creating a brand-new design…';
           if (i === 0) prog.setStep(0);
           const prompt = await versionPrompt(st, i, text);
           prog.setStep(1, `Creating version ${i + 1} of ${varStyles.length}`);
@@ -1116,7 +1137,7 @@ The design must be a completely new, original composition — never a copy of an
         // Headline prefilled from the topic: one quick call writes it, and it
         // is put into the field so the student sees (and can edit) it.
         try {
-          const h = (await geminiText(`Write a punchy YouTube thumbnail headline of 2-4 words, ALL CAPS, no quotes, no punctuation except !, for this video: ${prompt}`, { temperature: 0.8 })).replace(/["\n]/g, '').trim().slice(0, 42);
+          const h = (await geminiText(`Write a punchy YouTube thumbnail headline of 2-4 words, ALL CAPS, no quotes, no punctuation except !, for this video: ${prompt}`, { bulk: true, temperature: 0.8 })).replace(/["\n]/g, '').trim().slice(0, 42);
           if (h) { head = h; $('chead').value = h; }
         } catch { /* headline simply stays empty */ }
       }
@@ -1681,7 +1702,7 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
       for (let i = 0; i < chunks.length; i++) {
         if (i > 0) await breather(null); // pacing: space the chunk calls out
         if (st) st.textContent = `Scoring part ${i + 1} of ${chunks.length}… (${found.length} moments so far)`;
-        const d = await geminiJson(`You are a top stream clipper. From this part of a stream transcript, pick the moments for viral Shorts. Return JSON only: {"items":[{"title":"catchy, max 60 chars","at":"timestamp as written in the text, or '—'","score":0,"hook":"3-7 punchy words","why":"one short line"}]} Score strictly 0-99. Skip silence, menus, sponsor talk, intros. Transcript part:\n${chunks[i]}`, { onRetry: retryNote(null, st) });
+        const d = await geminiJson(`You are a top stream clipper. From this part of a stream transcript, pick the moments for viral Shorts. Return JSON only: {"items":[{"title":"catchy, max 60 chars","at":"timestamp as written in the text, or '—'","score":0,"hook":"3-7 punchy words","why":"one short line"}]} Score strictly 0-99. Skip silence, menus, sponsor talk, intros. Transcript part:\n${chunks[i]}`, { bulk: true, onRetry: retryNote(null, st) });
         for (const m of (d.items || [])) found.push({ startSec: parseTs(m.at), endSec: null, startLabel: m.at || '—', score: Math.max(0, Math.min(99, Number(m.score) || 0)), title: m.title || 'Moment', hook: m.hook || '', why: m.why || '', picked: false });
         found.sort((a, b2) => b2.score - a.score);
         renderFound();
