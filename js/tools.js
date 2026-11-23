@@ -123,7 +123,7 @@ function chunkText(text, size = 5000) {
  */
 const STUDENT_TOOLS = ['notes', 'flashcards', 'presentation', 'lecture-clips', 'examprep'];
 const SRC_LS = 'sc_student_source_v1';
-const SRC_FROM = { notes: 'Notes', flashcards: 'Flashcards + Quiz', presentation: 'Presentation Maker', 'lecture-clips': 'Revision Clips', examprep: 'Exam Prep' };
+const SRC_FROM = { notes: 'Notes', flashcards: 'Flashcards + Quiz', presentation: 'Presentation Maker', 'lecture-clips': 'Revision Clips', examprep: 'Exam Prep', mocktest: 'Mock Test', handwritten: 'Handwritten Notes', assignment: 'Assignment Builder' };
 let SRC = null; // {type:'youtube'|'pdf'|'text', link, videoId, text, pdfName, title, durationSec, chapters:[{title,startSec}], ready}
 const srcYtId = (u) => { const m = String(u || '').match(/(?:youtube\.com\/(?:watch\?[^#]*v=|live\/|shorts\/)|youtu\.be\/)([\w-]{6,})/); return m ? m[1] : ''; };
 const srcPart = () => ({ fileData: { fileUri: SRC.link, mimeType: 'video/*' } });
