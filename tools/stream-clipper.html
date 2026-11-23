@@ -8,6 +8,7 @@
 <meta name="description" content="Paste a YouTube stream link and Gemini watches it to find the viral moments — or scan a Twitch transcript — with scores, hooks and titles for each clip.">
 <title>Stream Clipper | StreamClip AI</title>
 <link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Luckiest+Guy&family=Montserrat:wght@700;800&family=Poppins:wght@700;800;900&display=swap">
 </head>
 <body data-tool="clipper">
 <header class="site-head"><div class="in">
@@ -24,16 +25,37 @@
 <div class="card"><h3>Step 1 — Paste the YouTube stream link</h3>
 <p class="small dim mt">Gemini watches the actual video from its link, on Google's side — no download and no transcript needed. Works on public videos; private or age-restricted ones can fail (use the Transcript tab then).</p>
 <label class="field"><span>YouTube link</span><input class="input" id="slink" placeholder="youtube.com/watch?v=… or youtu.be/…"></label>
-<h3 class="mt2">Step 2 — What should the AI hunt for?</h3>
+</div>
+<div class="card hidden" id="setupcard">
+<div class="live-row setup-stream" id="streamcard">
+<div class="live-th" id="sc-thumb"><span class="tag live hidden" id="sc-live">● LIVE</span></div>
+<div class="live-tx"><b id="sc-title">YouTube video</b><span class="who" id="sc-channel"></span><span class="watch" id="sc-meta"></span></div>
+</div>
+<p class="small dim" id="sc-probe"></p>
+<h3 class="mt2">What to scan</h3>
+<div class="chips mt" id="rg-range">
+<button class="chip on" data-range="whole">Whole stream</button><button class="chip" data-range="1800">Last 30 min</button><button class="chip" data-range="3600">Last hour</button><button class="chip" data-range="7200">Last 2 hours</button>
+</div>
+<p class="small dim mt" id="scancalls">About — Gemini calls.</p>
+<h3 class="mt2">Short length</h3>
+<div class="chips mt" id="rg-len">
+<button class="chip" data-len="20">20 sec</button><button class="chip" data-len="30">30 sec</button><button class="chip on" data-len="45">45 sec</button><button class="chip" data-len="60">60 sec</button>
+</div>
+<h3 class="mt2">How many shorts</h3>
+<div class="chips mt" id="rg-count">
+<button class="chip on" data-count="3">3</button><button class="chip" data-count="5">5</button><button class="chip" data-count="8">8</button><button class="chip" data-count="10">10</button>
+</div>
+<h3 class="mt2">AI voice</h3>
+<div class="chips mt" id="rg-voice">
+<button class="chip" data-voice="hook">Hook line</button><button class="chip" data-voice="story">Tell the story</button><button class="chip on" data-voice="none">No voice</button>
+</div>
+<h3 class="mt2">What should the AI hunt for?</h3>
 <div class="btns two">
 <label class="field"><span>Stream type</span><select class="input" id="cniche"><option>Gaming</option><option>Just chatting / IRL</option><option>Sports &amp; esports</option><option>Music / DJ</option><option>Podcast / talk</option><option>Study / lecture stream</option></select><span class="small dim">Tells the AI what a "big moment" looks like in this kind of stream.</span></label>
 <label class="field"><span>Clip style</span><select class="input" id="cstyle"><option>Balanced — best overall</option><option>Funniest moments</option><option>Hype &amp; clutch plays</option><option>Emotional / story moments</option><option>Fails &amp; surprises</option></select><span class="small dim">The flavour of moments to prefer when scoring.</span></label>
 </div>
-<div class="btns two">
-<label class="field"><span>How many clips to pre-pick</span><select class="input" id="ccount"><option>3</option><option selected>5</option><option>8</option><option>10</option></select><span class="small dim">The top moments are ticked for posting automatically — you can change the picks after.</span></label>
 <label class="slider"><div class="spread"><span>Minimum viral score</span><b id="cminv">70</b></div><input type="range" id="cmin" min="40" max="95" step="1" value="70"><span class="small dim">Only moments scoring at least this get pre-picked. 70 is a good start.</span></label>
-</div>
-<button class="btn block big mt" id="scan">Find best moments</button>
+<button class="btn block big mt" id="scan">✦ Start scanning</button>
 <div class="steps hidden" id="scansteps">
 <div class="step" id="st1"><span class="dot">1</span><span>Asking Gemini about this video…</span></div>
 <div class="step" id="st2"><span class="dot">2</span><span>Watching in 10-minute windows and scoring moments</span></div>
@@ -41,6 +63,7 @@
 </div></div>
 <div id="ytsummary"></div>
 <div id="ytmoments"></div>
+<div id="ytmake"></div>
 <div class="note mt"><div><b>Honest limits.</b><div class="small dim">Gemini watches the video on Google's side from the link — a browser website still cannot download YouTube/Twitch video files, and streams longer than 4 hours are watched in part. To cut the video file itself, use <a href="upload-video.html">Upload Your Own Video</a>.</div></div></div>
 </div>
 <div id="panel-tx" class="hidden">
@@ -58,10 +81,111 @@
 <p class="small dim mt" id="txstatus"></p></div>
 <div id="txsummary"></div>
 <div id="txmoments"></div>
+<div id="txmake"></div>
 </div>
+
+<section id="editor" class="hidden">
+<div class="back mt2">
+<button class="icon-btn" id="ed-back" aria-label="Back to moments"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5L8 12l6.5 7"/></svg></button>
+<div class="t"><h2 id="ed-title">Clip</h2><p class="dim small" id="ed-sub"></p></div>
+</div>
+<div class="ed-frame" id="ed-frame">
+<img class="ed-bg" id="ed-bg" alt="">
+<div class="ed-vidwrap" id="ed-vidwrap"><iframe id="ed-iframe" title="Final video preview" allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+<div class="ed-novid hidden" id="ed-novid"><b id="ed-novid-title"></b><p class="small dim" id="ed-novid-why"></p><p class="small"><span class="tag y">Hook</span> <span id="ed-novid-hook"></span></p><p class="small dim">No playable video for this moment — this summary stands in for the preview. Your edits below still save into the clip's brief.</p></div>
+<div class="ed-toptext hidden" id="ed-toptext"></div>
+<div class="ed-caption hidden" id="ed-caption"><span class="cap-in" id="ed-caption-in"></span></div>
+<div id="ed-overlays"></div>
+<span class="tag ed-lab">Final video</span>
+</div>
+<p class="small dim mt" style="text-align:center">Preview plays the real scene from YouTube. Drag with one finger, pinch to zoom — or use the Frame sliders.</p>
+<button class="btn dark block mt" id="ed-adjust">Adjust</button>
+<div id="ed-tabs" class="hidden">
+<div class="chips etabs mt">
+<button class="chip on" data-etab="frame">▣ Frame</button><button class="chip" data-etab="cut">✂ Cut</button><button class="chip" data-etab="captions">CC Captions</button><button class="chip" data-etab="add">✦ Add</button><button class="chip" data-etab="voice">🎙 Voice</button><button class="chip" data-etab="music">♪ Music</button><button class="chip" data-etab="toptext">T Top text</button>
+</div>
+
+<div class="card mt" id="ed-p-frame">
+<h3>Frame</h3>
+<p class="small dim mt">Move the video with your finger and pinch with two fingers to zoom. The sliders do the same.</p>
+<div class="chips mt"><button class="chip on" data-fmode="blur">Show all, blurred sides</button><button class="chip" data-fmode="fill">Fill the screen</button></div>
+<label class="slider mt"><div class="spread"><span>Zoom</span><b id="ed-zoomv">1.00x</b></div><input type="range" id="ed-zoom" min="1" max="2.5" step="0.05" value="1"></label>
+<label class="slider"><div class="spread"><span>Left and right</span><b id="ed-xv">50%</b></div><input type="range" id="ed-x" min="0" max="100" step="1" value="50"></label>
+<label class="slider"><div class="spread"><span>Up and down</span><b id="ed-yv">50%</b></div><input type="range" id="ed-y" min="0" max="100" step="1" value="50"></label>
+<button class="btn dark block mt" id="ed-center">⟳ Back to center</button>
+</div>
+
+<div class="card mt hidden" id="ed-p-cut">
+<h3>Cut the clip</h3>
+<p class="small dim mt">Drag where the short starts and ends.</p>
+<label class="slider mt"><div class="spread"><span>Start</span><b id="ed-startv">00:00.0</b></div><input type="range" id="ed-start" min="0" max="60" step="0.1" value="0"></label>
+<label class="slider"><div class="spread"><span>End</span><b id="ed-endv">00:00.0</b></div><input type="range" id="ed-end" min="0" max="60" step="0.1" value="45"></label>
+<p class="small dim mt" id="ed-length">Length: 0.0s</p>
+<p class="small dim" id="ed-cut-note"></p>
+</div>
+
+<div class="card mt hidden" id="ed-p-captions">
+<h3>Captions</h3>
+<p class="small dim mt">The caption line shows at the bottom of the preview.</p>
+<div class="togglerow mt"><span>Show captions</span><label class="switch"><input type="checkbox" id="ed-cap-on" checked><span class="tr"></span></label></div>
+<div class="chips mt" id="ed-capstyles"><button class="chip on" data-capstyle="bold">Bold</button><button class="chip" data-capstyle="box">Box</button><button class="chip" data-capstyle="yellow">Yellow</button><button class="chip" data-capstyle="mint">Mint</button></div>
+<div class="chips mt" id="ed-capfonts"><button class="chip on" data-capfont="poppins">Poppins</button><button class="chip" data-capfont="montserrat">Montserrat</button><button class="chip" data-capfont="anton">Anton</button><button class="chip" data-capfont="luckiest">Luckiest</button><button class="chip" data-capfont="bebas">Bebas</button></div>
+<label class="slider mt"><div class="spread"><span>Size</span><b id="ed-capsizev">100%</b></div><input type="range" id="ed-capsize" min="50" max="150" step="5" value="100"></label>
+<p class="small dim mt">Urdu, Hindi and Bangla use their own fonts by themselves.</p>
+</div>
+
+<div class="card mt hidden" id="ed-p-add">
+<h3>Add to the video</h3>
+<p class="small dim mt">Cover the streamer's camera with a blur or a box, or add your own text. Drag it on the video, and drag the small corner to resize.</p>
+<div class="btns two mt">
+<button class="btn dark" id="ed-add-blur">▣ Blur box</button>
+<button class="btn dark" id="ed-add-color">▣ Color box</button>
+<button class="btn dark" id="ed-add-text">T Text</button>
+<button class="btn" id="ed-findcam">⌕ Find the camera</button>
+</div>
+<p class="small dim mt">Find the camera: AI looks at the video and puts a blur over the streamer's webcam by itself.</p>
+<p class="small dim" id="ed-camstatus"></p>
+<div id="ed-ovlist"></div>
+</div>
+
+<div class="card mt hidden" id="ed-p-voice">
+<h3>AI voice</h3>
+<p class="small dim mt" id="ed-voicestatus">No AI voice yet. Write a line and make one.</p>
+<div class="chips mt" id="ed-vmodes"><button class="chip" data-vmode="hook">Hook line</button><button class="chip" data-vmode="story">Tell the story</button><button class="chip on" data-vmode="off">Off</button></div>
+<label class="field mt"><span>What the voice says (English)</span><textarea class="input" id="ed-voice-text" placeholder="The line the AI voice will say…"></textarea></label>
+<button class="btn dark block mt" id="ed-voice-make">🎙 Make the voice again</button>
+<div id="ed-voice-audio" class="mt"></div>
+<label class="slider mt"><div class="spread"><span>Voice volume</span><b id="ed-vvolv">100%</b></div><input type="range" id="ed-vvol" min="0" max="100" step="1" value="100"></label>
+<label class="slider"><div class="spread"><span>Stream sound</span><b id="ed-svolv">100%</b></div><input type="range" id="ed-svol" min="0" max="100" step="1" value="100"></label>
+<p class="small dim mt">Volumes are saved into the brief — they are applied when the video is rendered, not to this YouTube preview.</p>
+</div>
+
+<div class="card mt hidden" id="ed-p-music">
+<h3>Music</h3>
+<p class="small dim mt">Pick a song or beat from your phone. Use music you are allowed to use.</p>
+<label class="btn dark block mt" style="text-align:center;cursor:pointer">♪ Pick music<input type="file" id="ed-music" accept="audio/*" hidden></label>
+<p class="small dim mt" id="ed-musicname">No music picked yet. The file name is saved into the brief — the music itself is mixed in when the video is rendered.</p>
+</div>
+
+<div class="card mt hidden" id="ed-p-toptext">
+<h3>Top text</h3>
+<p class="small dim mt">Shows at the top of the video, like in the preview.</p>
+<div class="togglerow mt"><span>Show text on top</span><label class="switch"><input type="checkbox" id="ed-top-on" checked><span class="tr"></span></label></div>
+<label class="field mt"><span>Text (put *stars* around words to color them)</span><input class="input" id="ed-top-text" placeholder="We *stole* a *military* helicopter!"></label>
+<label class="field"><span>Title</span><input class="input" id="ed-top-title"></label>
+<label class="field"><span>Caption for posting</span><textarea class="input" id="ed-top-caption" placeholder="A caption with hashtags for posting this short…"></textarea></label>
+<div class="btns two mt"><button class="btn dark" id="ed-top-gen">Generate caption</button><button class="btn dark" id="ed-top-copy">⧉ Copy caption</button></div>
+</div>
+</div>
+<button class="btn block big mt" id="ed-make">✦ Make the video</button>
+<button class="btn dark block mt" id="ed-delete">🗑 Delete this short</button>
+<p class="small dim mt" id="ed-ready"></p>
+<div class="note mt"><div><b>Honest note.</b><div class="small dim">The preview above plays the real scene from YouTube, with your frame, caption and top-text choices laid over it. "Make the video" saves this clip — with every choice above — into the render queue brief. The downloadable rendered file itself is made by the render engine, which this website does not run yet, so nothing is rendered or downloaded here.</div></div></div>
+</section>
+
 <section class="guide"><h2>How this tool works</h2>
-<div class="steps-num"><div class="stp"><span class="n">1</span><div>For YouTube: paste the stream link — Gemini watches the video itself on Google's side, in 10-minute windows. For Twitch or private videos: use the Transcript tab and paste the transcript.</div></div><div class="stp"><span class="n">2</span><div>Choose the stream type and clip style so the AI scores the right kind of moments.</div></div><div class="stp"><span class="n">3</span><div>Tap "Find best moments" — moments appear live as each part is watched/read, each scored 0–99 with a title, hook and reason.</div></div><div class="stp"><span class="n">4</span><div>The best moments (above your minimum score) are pre-picked for posting. Change any pick with one tap, then copy the picked list.</div></div><div class="stp"><span class="n">5</span><div>Cut those timestamps from the stream video (or upload the recording in Upload Your Own Video) and post.</div></div></div>
-<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>A public YouTube stream link — or a transcript for Twitch/private videos</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A ranked list of the best moments with viral scores</li><li>A title and hook for every moment</li><li>Exact timestamps to cut, best moments pre-picked</li></ul></div></div></div>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>For YouTube: paste the stream link — Gemini watches the video itself on Google's side, in 10-minute windows. For Twitch or private videos: use the Transcript tab and paste the transcript.</div></div><div class="stp"><span class="n">2</span><div>Set up the scan: what part to scan, the short length, how many shorts, an AI voice if you want one, plus the stream type and clip style so the AI scores the right kind of moments.</div></div><div class="stp"><span class="n">3</span><div>Tap "Start scanning" — moments appear live as each part is watched/read, each scored 0–99 with a title, hook and reason.</div></div><div class="stp"><span class="n">4</span><div>The best moments (above your minimum score) are pre-picked. Change any pick, open a picked moment in the editor to frame, cut, caption and finish it, then tap "Make N shorts" to save the picked briefs.</div></div><div class="stp"><span class="n">5</span><div>Cut those timestamps from the stream video (or upload the recording in Upload Your Own Video) and post.</div></div></div>
+<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>A public YouTube stream link — or a transcript for Twitch/private videos</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A ranked list of the best moments with viral scores</li><li>A title and hook for every moment</li><li>Exact timestamps to cut, best moments pre-picked</li><li>An editor for every picked moment — frame, cut, captions, overlays, AI voice, music and top text, all saved into its brief</li></ul></div></div></div>
 <h2>Tips</h2><ul><li>Match the stream type honestly — a podcast scored like a gaming stream gives odd picks.</li><li>Pick moments that make sense to someone who never watched the stream.</li><li>Post the strongest moment first while you cut the rest.</li></ul>
 <h2>FAQ</h2><div class="faq"><b>Can the site download the video from my link and cut it?</b><p>No — downloading from YouTube/Twitch needs a server-side downloader engine, which a browser-only website cannot run. What changed: Gemini now watches the YouTube video itself from the link to find the moments. Cutting the file itself is done in Upload Your Own Video.</p></div><div class="faq"><b>What makes a moment score high?</b><p>Big reactions, clutch plays, fails, arguments, reveals and punchlines — moments that stand alone without context.</p></div></section></div>
 <footer class="site-foot"><div class="in">

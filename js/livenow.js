@@ -57,11 +57,13 @@ function fmtWatching(n) {
 function renderStreams(streams) {
   listEl.innerHTML = '';
   for (const s of streams) {
-    const a = document.createElement('a');
-    a.className = 'live-row';
-    a.href = s.url || `https://www.youtube.com/watch?v=${s.id || ''}`;
-    a.target = '_blank';
-    a.rel = 'noopener';
+    const url = s.url || `https://www.youtube.com/watch?v=${s.id || ''}`;
+    // The card itself opens the Stream Clipper with this stream loaded
+    // (the app's flow); a small separate link still opens it on YouTube.
+    const a = document.createElement('div');
+    a.className = 'live-row cardlink';
+    a.setAttribute('role', 'link');
+    a.title = 'Clip this stream with StreamClip AI';
 
     const th = document.createElement('div');
     th.className = 'live-th';
@@ -81,9 +83,25 @@ function renderStreams(streams) {
     const watch = document.createElement('span');
     watch.className = 'watch';
     watch.textContent = fmtWatching(s.viewers);
-    tx.append(b, who, watch);
+    const yt = document.createElement('a');
+    yt.className = 'ytgo small';
+    yt.href = url;
+    yt.target = '_blank';
+    yt.rel = 'noopener';
+    yt.textContent = 'Watch on YouTube ↗';
+    yt.addEventListener('click', (e) => e.stopPropagation());
+    tx.append(b, who, watch, yt);
 
     a.append(th, tx);
+    a.addEventListener('click', () => {
+      try {
+        localStorage.setItem('sc_handoff_v1', JSON.stringify({
+          link: url, title: s.title || '', channel: s.channel || '',
+          live: true, viewers: typeof s.viewers === 'number' ? s.viewers : null, ts: Date.now(),
+        }));
+      } catch {}
+      location.href = 'tools/stream-clipper.html?link=' + encodeURIComponent(url);
+    });
     listEl.appendChild(a);
   }
 }

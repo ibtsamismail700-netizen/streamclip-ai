@@ -1,6 +1,7 @@
 // StreamClip AI — tool logic. All AI runs in the browser on the visitor's key.
-import { requireKey, geminiText, geminiJson, geminiImage, geminiParts, geminiPartsJson, geminiYouTubeJson, geminiTTS, GEMINI_VOICES, fileToInline, esc } from './gemini.js';
+import { requireKey, hasKey, geminiText, geminiJson, geminiImage, geminiParts, geminiPartsJson, geminiYouTubeJson, geminiTTS, GEMINI_VOICES, fileToInline, esc } from './gemini.js';
 import { toast } from './site.js';
+import { initEditor } from './editor.js';
 
 const $ = (id) => document.getElementById(id);
 const tool = document.body.dataset.tool;
@@ -504,18 +505,27 @@ if (tool === 'upload' || tool === 'lecture-clips') {
 
 /* ---------- Stream Clipper ---------- */
 if (tool === 'clipper') {
-  // Home-page handoff: a stream link pasted on the home page (or on the Live
-  // Now page) arrives as a query param and/or a one-shot localStorage note —
-  // land it in the link field here.
-  try {
-    const qs = new URLSearchParams(location.search);
-    let ho = {};
-    try { ho = JSON.parse(localStorage.getItem('sc_handoff_v1') || '{}'); } catch {}
-    const hLink = qs.get('link') || ho.link || '';
-    localStorage.removeItem('sc_handoff_v1');
-    if (hLink) { $('slink').value = hLink; toast('Link carried over — tap Find best moments.'); }
-  } catch {}
+  let mode = 'yt';
+  let found = []; // {startSec, endSec, startLabel, score, title, hook, why, picked, brief?}
+  let editorHandle = null;
+  // Stream / scan state
+  let videoId = '', streamTitle = '', streamChannel = '', isLive = false, liveViewers = null, handoffId = '';
+  let durationSec = 0, probedId = '';
+  let scanRange = 'whole', shortLen = 45, pickCount = 3, voiceMode = 'none';
+  let scannedRanges = [], scannedUrl = '';
+
+  const ytId = (u) => { const m = String(u || '').match(/(?:youtube\.com\/(?:watch\?[^#]*v=|live\/|shorts\/)|youtu\.be\/)([\w-]{6,})/); return m ? m[1] : ''; };
+  const fmtWatching = (n) => {
+    if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) return 'Live now';
+    if (n >= 1000000) return `${(n / 1000000).toFixed(1).replace(/\.0$/, '')}M watching`;
+    if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K watching`;
+    return `${n} watching`;
+  };
+  const hosts = () => mode === 'yt' ? ['ytmoments', 'ytsummary', 'ytmake'] : ['txmoments', 'txsummary', 'txmake'];
+  const CAP_NAMES = { bold: 'Bold', box: 'Box', yellow: 'Yellow', mint: 'Mint', poppins: 'Poppins', montserrat: 'Montserrat', anton: 'Anton', luckiest: 'Luckiest', bebas: 'Bebas' };
+
   const setMode = (m) => {
+    mode = m;
     $('mode-yt').classList.toggle('on', m === 'yt');
     $('mode-tx').classList.toggle('on', m === 'tx');
     $('panel-yt').classList.toggle('hidden', m !== 'yt');
@@ -526,81 +536,264 @@ if (tool === 'clipper') {
   on('cmin', 'input', () => { $('cminv').textContent = $('cmin').value; });
   on('tmin', 'input', () => { $('tminv').textContent = $('tmin').value; });
 
-  let found = []; // {startLabel, score, title, hook, why}
+  /* ----- setup panel (app-style scan setup) ----- */
+  function updateCalls() {
+    const el = $('scancalls'); if (!el) return;
+    const n = scanRange === 'whole'
+      ? (durationSec > 0 ? Math.ceil(Math.min(durationSec, 4 * 3600) / 600) : '—')
+      : Number(scanRange) / 600;
+    el.textContent = `About ${n} Gemini calls.`;
+  }
+  async function probeSetup(url, id) {
+    if (probedId === id) return;
+    probedId = id;
+    const pr = $('sc-probe');
+    if (pr) pr.textContent = 'Checking the video with Gemini…';
+    try {
+      const p = await geminiYouTubeJson(url, 'Return JSON only: {"durationSec": 0, "title": ""} — durationSec is the total length of this video in seconds (a number), title is its title. If you truly cannot tell the length, use 0.', { timeoutMs: 120000 });
+      if (videoId !== id) return;
+      durationSec = Number(p.durationSec) || 0;
+      if (p.title && !streamTitle) { streamTitle = p.title; $('sc-title').textContent = streamTitle; }
+      if (pr) pr.textContent = durationSec ? `Video length: ${fmt(durationSec)}` : '';
+      updateCalls();
+    } catch { if (pr) pr.textContent = ''; }
+  }
+  function showSetup() {
+    const url = $('slink').value.trim();
+    const id = ytId(url);
+    if (!id) { $('setupcard').classList.add('hidden'); return; }
+    const changed = id !== videoId;
+    videoId = id;
+    if (id !== handoffId && changed) { isLive = false; liveViewers = null; streamTitle = ''; streamChannel = ''; durationSec = 0; probedId = ''; }
+    $('setupcard').classList.remove('hidden');
+    $('sc-thumb').style.backgroundImage = `url("https://i.ytimg.com/vi/${id}/mqdefault.jpg")`;
+    $('sc-live').classList.toggle('hidden', !isLive);
+    $('sc-title').textContent = streamTitle || 'YouTube video';
+    $('sc-channel').textContent = streamChannel || '';
+    $('sc-meta').textContent = liveViewers != null ? fmtWatching(liveViewers) : (isLive ? 'Live now' : '');
+    updateCalls();
+    if (changed && hasKey()) probeSetup(url, id);
+  }
+  on('slink', 'change', showSetup);
+  on('slink', 'paste', () => setTimeout(showSetup, 60));
+
+  function wireChips(boxId, attr, fn) {
+    const box = $(boxId); if (!box) return;
+    box.querySelectorAll(`[data-${attr}]`).forEach(c => c.addEventListener('click', () => {
+      box.querySelectorAll(`[data-${attr}]`).forEach(x => x.classList.toggle('on', x === c));
+      fn(c.dataset[attr]);
+    }));
+  }
+  wireChips('rg-range', 'range', v => { scanRange = v; updateCalls(); });
+  wireChips('rg-len', 'len', v => { shortLen = Number(v); });
+  wireChips('rg-count', 'count', v => { pickCount = Number(v); });
+  wireChips('rg-voice', 'voice', v => { voiceMode = v; if (found.length) renderFound(); });
+
+  // Handoff: a stream link from the home hero or a Live Now card arrives as a
+  // query param and/or a one-shot localStorage note (which can also carry the
+  // stream's title/channel/live state from /api/live) — land it in the field.
+  try {
+    const qs = new URLSearchParams(location.search);
+    let ho = {};
+    try { ho = JSON.parse(localStorage.getItem('sc_handoff_v1') || '{}'); } catch {}
+    const hLink = qs.get('link') || ho.link || '';
+    localStorage.removeItem('sc_handoff_v1');
+    if (hLink) {
+      if (ho.title) streamTitle = ho.title;
+      if (ho.channel) streamChannel = ho.channel;
+      if (ho.live) isLive = true;
+      if (typeof ho.viewers === 'number') liveViewers = ho.viewers;
+      handoffId = ytId(hLink);
+      $('slink').value = hLink;
+      showSetup();
+      toast('Link carried over — set up your scan, then tap Start scanning.');
+    }
+  } catch {}
+
+  /* ----- results (app-style "Best moments") ----- */
+  function timeLine(m) {
+    if (m.startSec != null && m.endSec != null) return `${fmt(m.startSec)} to ${fmt(m.endSec)} · ${Math.max(1, Math.round(m.endSec - m.startSec))}s`;
+    return m.startLabel || '—';
+  }
+  function watchUrl(m) {
+    if (!videoId || m.startSec == null) return '';
+    return `https://www.youtube.com/watch?v=${videoId}&t=${Math.max(0, Math.floor(m.startSec))}s`;
+  }
   function momentCard(m, i) {
-    return `<div class="outcard moment"><div><span class="time">${esc(m.startLabel)}</span><h3>${esc(m.title)}</h3></div>
+    const wu = watchUrl(m);
+    return `<div class="outcard moment"><div><span class="time">${esc(timeLine(m))}</span><h3>${esc(m.title)}</h3></div>
       <div class="score${m.score < 70 ? ' mid' : ''}">${esc(String(m.score))}</div>
       <p class="why">${esc(m.why || '')}</p>
       <p class="why"><span class="tag y">Hook</span> ${esc(m.hook || '')}</p>
-      <div class="acts"><button class="chip pickbtn${m.picked ? ' on' : ''}" data-pick="${i}">${m.picked ? '✓ Picked for posting' : 'Pick this moment'}</button></div></div>`;
+      ${wu ? `<p class="why"><a href="${wu}" target="_blank" rel="noopener">▶ Watch this scene</a> — verify it in the stream at ${esc(fmt(m.startSec))}.</p>` : ''}
+      <div class="acts"><button class="chip pickbtn${m.picked ? ' on' : ''}" data-pick="${i}">${m.picked ? '✓ Picked' : 'Pick'}</button>${m.picked ? `<button class="chip" data-edit="${i}">Open editor</button>` : ''}${voiceMode !== 'none' && m.picked ? `<button class="chip" data-voice="${i}">${voiceMode === 'hook' ? 'Make hook voice' : 'Make story voice'}</button>` : ''}</div>
+      ${m.voiceScript ? `<p class="why"><b>Voice line:</b> ${esc(m.voiceScript)}</p>` : ''}
+      ${m.voiceUrl ? `<audio controls src="${m.voiceUrl}" style="width:100%;grid-column:1/-1"></audio>` : ''}
+      </div>`;
   }
-  function renderFound(hostId, summaryId) {
+  function renderFound() {
+    const [hostId, summaryId] = hosts();
     const host = $(hostId);
     host.innerHTML = found.map((m, i) => momentCard(m, i)).join('');
-    host.querySelectorAll('[data-pick]').forEach(btn => btn.addEventListener('click', () => {
-      const m = found[Number(btn.dataset.pick)]; m.picked = !m.picked; renderFound(hostId, summaryId);
-    }));
-    const picks = found.filter(m => m.picked);
+    host.querySelectorAll('[data-pick]').forEach(btn => btn.addEventListener('click', () => { const m = found[Number(btn.dataset.pick)]; m.picked = !m.picked; renderFound(); }));
+    host.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => { const m = found[Number(btn.dataset.edit)]; if (m && editorHandle) editorHandle.open(m); }));
+    host.querySelectorAll('[data-voice]').forEach(btn => btn.addEventListener('click', () => genVoice(found[Number(btn.dataset.voice)])));
     const sm = $(summaryId);
-    if (sm) sm.innerHTML = found.length ? `<div class="spread"><b>${found.length} moments found · ${picks.length} picked</b><button class="chip" id="copypicks-${summaryId}">Copy picked list</button></div>` : '';
-    const cp = $(`copypicks-${summaryId}`);
-    if (cp) cp.addEventListener('click', () => copyText(picks.map((m, i) => `${i + 1}. [${m.startLabel}] ${m.title} (score ${m.score})\nHook: ${m.hook}`).join('\n\n') || 'No moments picked yet.', 'Picked list copied.'));
+    if (sm) sm.innerHTML = found.length ? `<div class="spread mt2"><h2>Best moments</h2><span class="tag y">${found.length} found</span></div>${mode === 'yt' ? '<button class="btn dark block mt" id="scannewest">⟳ Scan the newest part</button>' : ''}` : '';
+    const sn = $('scannewest');
+    if (sn) sn.addEventListener('click', scanNewest);
+    renderMake();
+  }
+  function renderMake() {
+    const [, , makeId] = hosts();
+    const host = $(makeId); if (!host) return;
+    const picks = found.filter(m => m.picked);
+    host.innerHTML = found.length ? `<button class="btn block big mt" id="makebtn">✦ Make ${picks.length} shorts</button><div id="briefhost"></div>` : '';
+    const mb = $('makebtn');
+    if (mb) mb.addEventListener('click', renderBrief);
+  }
+  function momentBrief(m) {
+    const b = m.brief || {};
+    return {
+      title: b.topTitle || m.title,
+      time: timeLine(m), score: m.score, watch: watchUrl(m),
+      hook: b.hookText || m.hook || '',
+      cut: (b.cutStart != null && b.cutEnd != null) ? `${fmt(b.cutStart)} – ${fmt(b.cutEnd)}` : timeLine(m),
+      frame: b.frameMode ? `${b.frameMode === 'fill' ? 'Fill the screen' : 'Show all, blurred sides'} · zoom ${Number(b.zoom || 1).toFixed(2)}x · position ${b.fx != null ? b.fx : 50}% / ${b.fy != null ? b.fy : 50}%` : 'Show all, blurred sides (default)',
+      captions: b.capOn === false ? 'Off' : `${CAP_NAMES[b.capStyle] || 'Bold'} · ${CAP_NAMES[b.capFont] || 'Poppins'} · ${b.capSize || 100}%`,
+      voice: m.voiceScript || b.voiceText || 'None',
+      voiceVolumes: `voice ${b.vvol != null ? b.vvol : 100}% · stream ${b.svol != null ? b.svol : 100}%`,
+      music: b.musicName || 'None',
+      topText: b.topOn === false ? 'Off' : (b.topText || '(not set)'),
+      postCaption: b.postCaption || '',
+      overlays: (b.overlays || []).map(o => `${o.kind} at ${Math.round(o.x)}%, ${Math.round(o.y)}% · ${Math.round(o.w)}% × ${Math.round(o.h)}%${o.kind === 'text' ? ` "${o.text || ''}"` : ''}`),
+    };
+  }
+  function briefText(picks) {
+    return picks.map((m, i) => {
+      const br = momentBrief(m);
+      return `## Short ${i + 1}: ${br.title}\n- Time: ${br.time} (score ${br.score})\n- Watch this scene: ${br.watch || '—'}\n- Cut: ${br.cut}\n- Hook: ${br.hook || '—'}\n- Frame: ${br.frame}\n- Captions: ${br.captions}\n- Voice: ${br.voice} (${br.voiceVolumes})\n- Music: ${br.music}\n- Top text: ${br.topText}\n- Overlays: ${br.overlays.join('; ') || 'none'}\n- Posting caption: ${br.postCaption || '—'}`;
+    }).join('\n\n');
+  }
+  function renderBrief() {
+    const host = $('briefhost'); if (!host) return;
+    const picks = found.filter(m => m.picked);
+    if (!picks.length) { host.innerHTML = '<div class="outcard mt"><b>No moments picked.</b><p class="small dim mt">Pick at least one moment above first.</p></div>'; return; }
+    host.innerHTML = `<h3 class="mt2">Your shorts plan — ${picks.length} picked</h3>` + picks.map((m) => {
+      const br = momentBrief(m);
+      return `<div class="outcard"><div class="spread"><b>${esc(br.title)}</b><span class="tag y">${esc(br.time)}</span></div>
+      <p class="small dim mt">Score ${br.score}${br.watch ? ` · <a href="${br.watch}" target="_blank" rel="noopener">▶ Watch this scene</a>` : ''}</p>
+      <p class="small mt"><b>Cut:</b> ${esc(br.cut)}<br><b>Hook:</b> ${esc(br.hook || '—')}<br><b>Frame:</b> ${esc(br.frame)}<br><b>Captions:</b> ${esc(br.captions)}<br><b>Voice:</b> ${esc(br.voice)} (${esc(br.voiceVolumes)})<br><b>Music:</b> ${esc(br.music)}<br><b>Top text:</b> ${esc(br.topText)}${br.overlays.length ? `<br><b>Overlays:</b> ${esc(br.overlays.join('; '))}` : ''}${br.postCaption ? `<br><b>Posting caption:</b> ${esc(br.postCaption)}` : ''}</p>
+      <button class="chip mt" data-editb="${found.indexOf(m)}">Open editor</button></div>`;
+    }).join('') +
+      `<div class="note mt"><div><b>Render queue.</b><div class="small dim">These briefs are saved for the render engine — the final downloadable videos are queued, not rendered here, because this website does not run a render engine yet. Nothing above fakes a finished file.</div></div></div>
+      <div class="btns two mt"><button class="btn sm" id="copybrief">Copy brief</button><button class="btn dark sm" id="dlbrief">Download brief (.md)</button></div>`;
+    host.querySelectorAll('[data-editb]').forEach(btn => btn.addEventListener('click', () => { const m = found[Number(btn.dataset.editb)]; if (m && editorHandle) editorHandle.open(m); }));
+    on('copybrief', 'click', () => copyText(briefText(picks), 'Brief copied.'));
+    on('dlbrief', 'click', () => download('streamclip-brief.md', briefText(picks), 'text/markdown'));
+    host.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   function finishPick(count, minScore) {
     found.sort((a, b) => b.score - a.score);
     let n = 0;
     for (const m of found) { m.picked = m.score >= minScore && n < count; if (m.picked) n++; }
   }
+  async function genVoice(m) {
+    if (!m || !requireKey()) return;
+    try {
+      toast('Making the AI voice…');
+      if (!m.voiceScript) {
+        m.voiceScript = await geminiText(voiceMode === 'hook'
+          ? `Write ONE punchy spoken hook line (max 12 words) for a short clip titled "${m.title}". What happens: ${m.why || ''}. Return only the line, no quotes.`
+          : `Write a short spoken narration (2-3 sentences, max 45 words) telling the story of this clip moment for a vertical short. Title: "${m.title}". What happens: ${m.why || ''}. Return only the narration.`, { temperature: 0.7 });
+      }
+      const blob = await geminiTTS(m.voiceScript, 'Kore');
+      m.voiceUrl = URL.createObjectURL(blob);
+      toast('Voice made — press play on the card.');
+    } catch (err) { toast('Voice failed: ' + err.message, true); }
+    renderFound();
+  }
   const stepEl = (id, state, text) => { const el = $(id); if (!el) return; el.className = 'step' + (state ? ' ' + state : ''); el.querySelector('span:last-child').textContent = text; };
   const scanRetry = (id) => ({ attempt, total }) => stepEl(id, 'now', `Google is busy — retrying (${attempt}/${total})…`);
+  const PROBE_PROMPT = 'Return JSON only: {"durationSec": 0, "title": ""} — durationSec is the total length of this video in seconds (a number), title is its title. If you truly cannot tell the length, use 0.';
 
-  // --- YouTube: Gemini watches the video from its URL, in time windows ---
+  /* ----- YouTube scan: Gemini watches the video in time windows ----- */
+  async function scanWindow(url, s, en) {
+    const niche = $('cniche').value, style = $('cstyle').value;
+    return geminiYouTubeJson(url, `You are a top stream clipper. Watch ONLY the segment of this video you were given (it starts at ${fmt(s)} of the full video). Niche: ${niche}. Clip style: ${style}. Aim for moments about ${shortLen} seconds long.
+Find the moments in THIS segment that would make viral Shorts. Return JSON only:
+{"beyondEnd": false, "moments": [{"startSec": 0, "endSec": 0, "score": 0, "title": "...", "hook": "...", "why": "..."}]}
+startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict viral score 0-99. title max 60 chars. hook is 3-7 punchy words. why is one short line. Skip silence, menus, sponsor reads, intros and outros. If this segment is past the end of the video, return {"beyondEnd": true, "moments": []}.`, { startSec: s, endSec: en, onRetry: scanRetry('st2') });
+  }
+  function addMoments(list, base) {
+    let added = 0, dropped = 0;
+    for (const m of (list || [])) {
+      const st = base + (parseTs(m.startSec) || 0);
+      let en = m.endSec != null ? base + (parseTs(m.endSec) || 0) : null;
+      // Provenance: never keep a moment that starts past the video's real
+      // end; clamp the end to the known duration.
+      if (durationSec > 0 && st >= durationSec) { dropped++; continue; }
+      if (durationSec > 0 && en != null && en > durationSec) en = durationSec;
+      found.push({ startSec: st, endSec: en, startLabel: `${fmt(st)}${en != null ? ' – ' + fmt(en) : ''}`, score: Math.max(0, Math.min(99, Number(m.score) || 0)), title: m.title || 'Moment', hook: m.hook || '', why: m.why || '', picked: false });
+      added++;
+    }
+    return { added, dropped };
+  }
+
   on('scan', 'click', async (e) => {
     if (!requireKey()) return;
     const url = $('slink').value.trim();
     if (!/(youtube\.com|youtu\.be)/i.test(url)) { toast('Paste a YouTube link — or switch to the Transcript tab for Twitch.', true); return; }
     const b = e.currentTarget; busy(b, true);
-    found = []; renderFound('ytmoments', 'ytsummary');
+    found = []; scannedRanges = []; scannedUrl = url; renderFound();
     $('scansteps').classList.remove('hidden');
     stepEl('st1', 'now', 'Asking Gemini about this video…');
     stepEl('st2', '', 'Watching in 10-minute windows and scoring moments');
     stepEl('st3', '', 'Ranking and pre-picking the best');
     try {
-      let durationSec = 0, title = '';
-      try {
-        const probe = await geminiYouTubeJson(url, 'Return JSON only: {"durationSec": 0, "title": ""} — durationSec is the total length of this video in seconds (a number), title is its title. If you truly cannot tell the length, use 0.', { timeoutMs: 120000, onRetry: scanRetry('st1') });
-        durationSec = Number(probe.durationSec) || 0; title = probe.title || '';
-      } catch { /* probe is best-effort; windows below still run */ }
-      stepEl('st1', 'ok', title ? `Video found: ${title}${durationSec ? ` · ${fmt(durationSec)} long` : ''}` : 'Video accepted by Gemini');
+      if (!(durationSec > 0 && probedId === videoId)) {
+        try {
+          const probe = await geminiYouTubeJson(url, PROBE_PROMPT, { timeoutMs: 120000, onRetry: scanRetry('st1') });
+          durationSec = Number(probe.durationSec) || 0;
+          if (probe.title && !streamTitle) { streamTitle = probe.title; $('sc-title').textContent = streamTitle; }
+          probedId = videoId;
+          updateCalls();
+        } catch { /* probe is best-effort; windows below still run */ }
+      }
+      stepEl('st1', 'ok', streamTitle ? `Video found: ${streamTitle}${durationSec ? ` · ${fmt(durationSec)} long` : ''}` : 'Video accepted by Gemini');
       stepEl('st2', 'now', 'Watching…');
       const WIN = 600;
       const total = durationSec > 0 ? Math.min(durationSec, 4 * 3600) : 3600;
-      const wins = Math.max(1, Math.ceil(total / WIN));
-      const niche = $('cniche').value, style = $('cstyle').value;
-      let beyond = false;
-      for (let w = 0; w < wins && !beyond; w++) {
-        const s = w * WIN, en = Math.min(total, s + WIN);
-        stepEl('st2', 'now', `Watching ${fmt(s)} – ${fmt(en)} (window ${w + 1} of ${wins})…`);
+      const winsTotal = Math.max(1, Math.ceil(total / WIN));
+      // Honour "What to scan": tail options scan only the windows covering
+      // the last X minutes (end-aligned chunks, so the call count matches).
+      let winList = [];
+      if (scanRange !== 'whole' && durationSec > 0) {
+        const t0 = Math.max(0, total - Number(scanRange));
+        for (let s = t0; s < total; s += WIN) winList.push([s, Math.min(total, s + WIN)]);
+      } else {
+        if (scanRange !== 'whole') stepEl('st2', 'now', 'Length unknown — scanning the whole video instead…');
+        for (let w = 0; w < winsTotal; w++) winList.push([w * WIN, Math.min(total, w * WIN + WIN)]);
+      }
+      let beyond = false, droppedTotal = 0;
+      for (let k = 0; k < winList.length && !beyond; k++) {
+        const [s, en] = winList[k];
+        stepEl('st2', 'now', `Watching ${fmt(s)} – ${fmt(en)} (window ${k + 1} of ${winList.length})…`);
         try {
-          const d = await geminiYouTubeJson(url, `You are a top stream clipper. Watch ONLY the segment of this video you were given (it starts at ${fmt(s)} of the full video). Niche: ${niche}. Clip style: ${style}.
-Find the moments in THIS segment that would make viral Shorts. Return JSON only:
-{"beyondEnd": false, "moments": [{"startSec": 0, "endSec": 0, "score": 0, "title": "...", "hook": "...", "why": "..."}]}
-startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict viral score 0-99. title max 60 chars. hook is 3-7 punchy words. why is one short line. Skip silence, menus, sponsor reads, intros and outros. If this segment is past the end of the video, return {"beyondEnd": true, "moments": []}.`, { startSec: s, endSec: en, onRetry: scanRetry('st2') });
+          const d = await scanWindow(url, s, en);
           if (d.beyondEnd) { beyond = true; break; }
-          for (const m of (d.moments || [])) {
-            const st = s + (parseTs(m.startSec) || 0);
-            found.push({ startLabel: `${fmt(st)}${m.endSec != null ? ' – ' + fmt(s + (parseTs(m.endSec) || 0)) : ''}`, score: Math.max(0, Math.min(99, Number(m.score) || 0)), title: m.title || 'Moment', hook: m.hook || '', why: m.why || '', picked: false });
-          }
+          droppedTotal += addMoments(d.moments, s).dropped;
+          scannedRanges.push([s, en]);
           found.sort((a, b2) => b2.score - a.score);
-          renderFound('ytmoments', 'ytsummary');
+          renderFound();
         } catch (err) {
-          if (w === 0) throw err; // first window failing = the link itself failed
-          stepEl('st2', 'now', `Window ${w + 1} could not be watched (${err.message}) — continuing…`);
+          if (k === 0) throw err; // first window failing = the link itself failed
+          stepEl('st2', 'now', `Window ${k + 1} could not be watched (${err.message}) — continuing…`);
         }
       }
-      stepEl('st2', 'ok', `Watched the video — ${found.length} moments found`);
-      finishPick(Number($('ccount').value), Number($('cmin').value));
-      renderFound('ytmoments', 'ytsummary');
+      stepEl('st2', 'ok', `Watched the video — ${found.length} moments found${droppedTotal ? ` · Ignored ${droppedTotal} moment${droppedTotal > 1 ? 's' : ''} past the video's end` : ''}`);
+      finishPick(pickCount, Number($('cmin').value));
+      renderFound();
       stepEl('st3', 'ok', `Best ${found.filter(m => m.picked).length} moments pre-picked (score ≥ ${$('cmin').value})`);
       if (!found.length) toast('Gemini watched it but found no strong moments. Try the transcript mode, or a different stream.', true);
     } catch (err) {
@@ -608,31 +801,81 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
       stepEl('st2', '', '');
       toast('YouTube scan failed: ' + err.message + ' — private/age-restricted or very long videos can fail; the Transcript tab always works.', true);
     }
-    busy(b, false, 'Find best moments');
+    busy(b, false, '✦ Start scanning');
   });
 
-  // --- Transcript mode: same scoring engine, chunk by chunk (Twitch & others) ---
+  // "Scan the newest part": re-watch only the LAST 10-minute window (the
+  // newest window not yet scanned, or the final window again if everything
+  // was scanned) and merge — moments in that window are replaced, picks for
+  // surviving moments are kept.
+  async function scanNewest() {
+    if (!requireKey()) return;
+    const url = $('slink').value.trim();
+    if (!scannedUrl || url !== scannedUrl) { toast('Scan this video first, then scan its newest part.', true); return; }
+    $('scansteps').classList.remove('hidden');
+    stepEl('st2', 'now', 'Checking the newest part…');
+    try {
+      try {
+        const p = await geminiYouTubeJson(url, PROBE_PROMPT, { timeoutMs: 120000, onRetry: scanRetry('st1') });
+        if (Number(p.durationSec)) durationSec = Number(p.durationSec);
+      } catch { /* keep the duration we have */ }
+      const WIN = 600;
+      const total = durationSec > 0 ? Math.min(durationSec, 4 * 3600) : 3600;
+      const winsTotal = Math.max(1, Math.ceil(total / WIN));
+      const ts = (winsTotal - 1) * WIN, te = total;
+      const covered = scannedRanges.some(([s, en]) => s <= ts && en >= te);
+      stepEl('st2', 'now', covered
+        ? 'Everything was already scanned — rescanning the newest part (the last 10 minutes) anyway…'
+        : `Scanning the newest part (${fmt(ts)} – ${fmt(te)})…`);
+      const pickedAt = new Set(found.filter(m => m.picked).map(m => m.startSec));
+      found = found.filter(m => !(m.startSec != null && m.startSec >= ts && m.startSec < te));
+      const d = await scanWindow(url, ts, te);
+      let dropped = 0;
+      if (!d.beyondEnd) dropped = addMoments(d.moments, ts).dropped;
+      for (const m of found) if (pickedAt.has(m.startSec)) m.picked = true;
+      scannedRanges.push([ts, te]);
+      found.sort((a, b2) => b2.score - a.score);
+      renderFound();
+      stepEl('st2', 'ok', `Newest part scanned — ${found.length} moments in total${dropped ? ` · Ignored ${dropped} moment${dropped > 1 ? 's' : ''} past the video's end` : ''}`);
+    } catch (err) { toast('Newest-part scan failed: ' + err.message, true); renderFound(); }
+  }
+
+  /* ----- Transcript mode: same scoring engine, chunk by chunk ----- */
   on('tscan', 'click', async (e) => {
     if (!requireKey()) return;
     const text = $('transcript').value.trim();
     if (text.length < 120) { toast('Paste the stream transcript first (at least a few minutes of it).', true); return; }
     const b = e.currentTarget; busy(b, true);
-    found = []; renderFound('txmoments', 'txsummary');
+    found = []; renderFound();
     const st = $('txstatus'); if (st) st.textContent = 'Reading the transcript…';
     try {
       const chunks = chunkText(text, 9000);
       for (let i = 0; i < chunks.length; i++) {
         if (st) st.textContent = `Scoring part ${i + 1} of ${chunks.length}… (${found.length} moments so far)`;
         const d = await geminiJson(`You are a top stream clipper. From this part of a stream transcript, pick the moments for viral Shorts. Return JSON only: {"items":[{"title":"catchy, max 60 chars","at":"timestamp as written in the text, or '—'","score":0,"hook":"3-7 punchy words","why":"one short line"}]} Score strictly 0-99. Skip silence, menus, sponsor talk, intros. Transcript part:\n${chunks[i]}`, { onRetry: retryNote(null, st) });
-        for (const m of (d.items || [])) found.push({ startLabel: m.at || '—', score: Math.max(0, Math.min(99, Number(m.score) || 0)), title: m.title || 'Moment', hook: m.hook || '', why: m.why || '', picked: false });
+        for (const m of (d.items || [])) found.push({ startSec: parseTs(m.at), endSec: null, startLabel: m.at || '—', score: Math.max(0, Math.min(99, Number(m.score) || 0)), title: m.title || 'Moment', hook: m.hook || '', why: m.why || '', picked: false });
         found.sort((a, b2) => b2.score - a.score);
-        renderFound('txmoments', 'txsummary');
+        renderFound();
       }
       finishPick(Number($('tcount').value), Number($('tmin').value));
-      renderFound('txmoments', 'txsummary');
+      renderFound();
       if (st) st.textContent = `Done — ${found.length} moments found, best ${found.filter(m => m.picked).length} pre-picked.`;
     } catch (err) { toast(err.message, true); if (st) st.textContent = ''; }
     busy(b, false, 'Find best moments');
+  });
+
+  /* ----- clip editor (js/editor.js) ----- */
+  editorHandle = initEditor({
+    getFound: () => found,
+    getMode: () => mode,
+    getVideoId: () => videoId,
+    getStreamTitle: () => streamTitle || 'this stream',
+    getVoiceMode: () => voiceMode,
+    getDuration: () => durationSec,
+    pickedCount: () => found.filter(m => m.picked).length,
+    rerender: () => renderFound(),
+    onMake: () => { if (editorHandle) editorHandle.close(); renderFound(); renderBrief(); toast('Saved into the render queue — brief below.'); },
+    onDelete: (m) => { found = found.filter(x => x !== m); if (editorHandle) editorHandle.close(); renderFound(); toast('Short deleted.'); },
   });
 }
 
