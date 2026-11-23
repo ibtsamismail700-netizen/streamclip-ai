@@ -241,9 +241,11 @@ Narration per slide: 2-4 natural spoken sentences in the chosen language and ton
 
 /* ---------- Thumbnail Creator / Redesigner ---------- */
 if (tool === 'thumbnail') {
-  const RATIOS = { '16:9': [1280, 720], '9:16': [1080, 1920], '1:1': [1080, 1080], '4:3': [1280, 960], '3:4': [1080, 1440] };
+  const RATIOS = { '16:9': [1280, 720], '9:16': [1080, 1920], '1:1': [1080, 1080], '4:3': [1280, 960], '3:4': [1080, 1440], '1.91:1': [1200, 628] };
+  // The image model has no 1.91:1 setting; ask it for 16:9 and crop to the exact 1200×628 canvas.
+  const modelRatio = () => (ratio === '1.91:1' ? '16:9' : ratio);
   let ratio = '16:9';
-  let file = null, subjectImg = null, analysisText = '';
+  let file = null, analysis = null, analysisText = '';
   // Tabs
   const setTab = (which) => {
     $('tab-creator').classList.toggle('on', which === 'creator');
@@ -264,7 +266,8 @@ if (tool === 'thumbnail') {
   // Upload for redesign
   on('tfile', 'change', async (e) => {
     file = e.target.files?.[0] || null;
-    if (file) { const u = URL.createObjectURL(file); $('tprev').src = u; $('tprev').classList.remove('hidden'); subjectImg = await loadImg(u).catch(() => null); }
+    analysis = null;
+    if (file) { const u = URL.createObjectURL(file); $('tprev').src = u; $('tprev').classList.remove('hidden'); }
   });
   on('analyse', 'click', async (e) => {
     if (!requireKey()) return;
@@ -274,6 +277,7 @@ if (tool === 'thumbnail') {
       const part = await fileToInline(file);
       const d = await geminiPartsJson([part, { text: `Analyse this YouTube thumbnail like a top thumbnail designer. Return JSON only:
 {"topic":"what the video is about","textOnThumbnail":"the EXACT text written on the thumbnail, word for word","subject":"the main subject/face/object","works":["what works, short"],"weak":["what is weak, short"],"directions":["4 redesign directions that look completely different from each other but keep the SAME text"]}` }], { temperature: 0.4, onRetry: retryNote(b) });
+      analysis = d;
       analysisText = d.textOnThumbnail || '';
       if (analysisText && !$('ttext').value.trim()) $('ttext').value = analysisText;
       out('aresult', `<div class="outcard"><b>Analysis</b>
@@ -285,24 +289,17 @@ if (tool === 'thumbnail') {
     } catch (err) { toast(err.message, true); }
     busy(b, false, 'Analyse thumbnail');
   });
-  // Canvas thumbnail painter: exact pixel size for the chosen ratio.
-  function paintThumb(cv, st, text, img) {
+  // Canvas fallback painter: designed background + the exact text ONLY.
+  // It never draws the uploaded thumbnail — a redesign must be a new design.
+  function paintThumb(cv, st, text) {
     const [W, H] = RATIOS[ratio]; cv.width = W; cv.height = H;
     const x = cv.getContext('2d');
     const g = x.createLinearGradient(0, 0, W, H); g.addColorStop(0, st.bg[0]); g.addColorStop(1, st.bg[1]);
     x.fillStyle = g; x.fillRect(0, 0, W, H);
     const portrait = H > W;
-    if (img) {
-      // Subject image: side panel on landscape, top panel on portrait.
-      const box = portrait ? [W * 0.06, H * 0.05, W * 0.88, H * 0.42] : (st.pos === 'right' ? [W * 0.04, H * 0.12, W * 0.44, H * 0.76] : [W * 0.52, H * 0.12, W * 0.44, H * 0.76]);
-      x.save(); roundRect(x, box[0], box[1], box[2], box[3], 26); x.clip();
-      const sc = Math.max(box[2] / img.width, box[3] / img.height);
-      x.drawImage(img, box[0] + (box[2] - img.width * sc) / 2, box[1] + (box[3] - img.height * sc) / 2, img.width * sc, img.height * sc);
-      x.restore();
-    }
-    const tx = portrait ? W * 0.06 : (img && st.pos !== 'right' ? W * 0.05 : W * 0.52);
-    const tw = portrait ? W * 0.88 : (img ? W * 0.43 : W * 0.9);
-    const ty = portrait ? H * 0.58 : H * 0.3;
+    const tx = portrait ? W * 0.06 : W * 0.05;
+    const tw = portrait ? W * 0.88 : W * 0.9;
+    const ty = H * 0.3;
     x.fillStyle = st.accent; x.fillRect(tx, ty - H * 0.075, Math.min(260, tw * 0.45), Math.max(10, H * 0.018));
     x.fillStyle = inkColor; x.strokeStyle = 'rgba(0,0,0,.85)'; x.lineWidth = Math.max(6, W * 0.008); x.lineJoin = 'round';
     const fs = Math.round(W * (String(text).length > 18 ? 0.062 : 0.078));
@@ -316,30 +313,70 @@ if (tool === 'thumbnail') {
     return cv;
   }
   const varStyles = [
-    { name: 'Bold Yellow', bg: ['#ffc81f', '#e3a500'], accent: '#e02c2c', pos: 'left' },
-    { name: 'Dark Neon', bg: ['#0b1026', '#23307a'], accent: '#4aa8ff', pos: 'right' },
-    { name: 'Red Alert', bg: ['#3a0d0d', '#a8231b'], accent: '#ffe46b', pos: 'left' },
-    { name: 'Clean Mint', bg: ['#06281a', '#157a45'], accent: '#ffe46b', pos: 'right' },
-    { name: 'Purple Pop', bg: ['#2a0a4a', '#7b2ff7'], accent: '#ffe46b', pos: 'left' },
-    { name: 'Mono Contrast', bg: ['#0a0a0a', '#2e2e2e'], accent: '#ffffff', pos: 'right' },
+    { name: 'Bold Yellow', bg: ['#ffc81f', '#e3a500'], accent: '#e02c2c', pos: 'left', dir: 'explosive bright-yellow background, huge chunky lettering, high-energy viral YouTube style' },
+    { name: 'Dark Neon', bg: ['#0b1026', '#23307a'], accent: '#4aa8ff', pos: 'right', dir: 'dark midnight-blue scene with glowing neon-blue rim light, futuristic gaming mood' },
+    { name: 'Red Alert', bg: ['#3a0d0d', '#a8231b'], accent: '#ffe46b', pos: 'left', dir: 'dramatic deep-red background, urgent breaking-news energy, strong shadows' },
+    { name: 'Clean Mint', bg: ['#06281a', '#157a45'], accent: '#ffe46b', pos: 'right', dir: 'fresh green gradient, clean modern minimal tech look, lots of breathing room' },
+    { name: 'Purple Pop', bg: ['#2a0a4a', '#7b2ff7'], accent: '#ffe46b', pos: 'left', dir: 'vibrant purple gradient, playful pop-art energy, bold shapes' },
+    { name: 'Mono Contrast', bg: ['#0a0a0a', '#2e2e2e'], accent: '#ffffff', pos: 'right', dir: 'stark black-and-white high-contrast minimal design, one bold accent' },
   ];
+  // Redesign prompt: built ONLY from the written analysis (topic, exact text,
+  // subject, direction). The uploaded image itself is never sent to the image
+  // model, so every version is a genuinely new design.
+  const redesignPrompt = (st, i, text) => {
+    const extra = (analysis?.directions || [])[i] || '';
+    return `Design a COMPLETELY NEW, original YouTube thumbnail — invent a fresh composition and layout from scratch, full-frame artwork edge to edge. Do not copy, trace or reuse the layout of any existing thumbnail.
+${analysis?.topic ? `Video topic: ${analysis.topic}.` : ''}
+${analysis?.subject ? `Main subject to feature prominently: ${analysis.subject}.` : ''}
+Art direction: ${st.dir}.${extra ? ` Creative direction: ${extra}.` : ''}
+The thumbnail must show this EXACT text, word for word, spelled exactly, in huge bold letters that dominate the design: "${text}"
+High contrast, dramatic, instantly readable at small size, professional YouTube thumbnail style, no watermark.`;
+  };
   on('makevars', 'click', async (e) => {
+    if (!requireKey()) return;
     const text = $('ttext').value.trim();
     if (!text) { toast('Write the thumbnail text first (analyse fills it automatically).', true); return; }
     const b = e.currentTarget; busy(b, true);
     const host = $('vars'); host.innerHTML = '';
-    varStyles.forEach((st, i) => {
-      const cv = paintThumb(document.createElement('canvas'), st, text, subjectImg);
-      cv.className = 'thumbcv';
-      const card = document.createElement('div'); card.className = 'outcard';
-      card.innerHTML = `<div class="spread"><b>Version ${i + 1} — ${st.name}</b><span class="tag y">${ratio} · ${RATIOS[ratio][0]}×${RATIOS[ratio][1]}</span></div>`;
-      card.appendChild(cv);
-      const dl = document.createElement('button'); dl.className = 'btn sm mt'; dl.textContent = 'Download this version';
-      dl.addEventListener('click', () => { const a = document.createElement('a'); a.download = `thumbnail-${ratio.replace(':', 'x')}-v${i + 1}.png`; a.href = cv.toDataURL('image/png'); a.click(); });
-      card.appendChild(dl); host.appendChild(card);
-    });
-    busy(b, false, 'Generate different versions');
-    toast('6 different versions made — same text on all, in ' + ratio + '.');
+    const [W, H] = RATIOS[ratio];
+    let made = 0, designed = 0;
+    try {
+      for (let i = 0; i < varStyles.length; i++) {
+        const st = varStyles[i];
+        const card = document.createElement('div'); card.className = 'outcard';
+        card.innerHTML = `<div class="spread"><b>Version ${i + 1} — ${st.name}</b><span class="tag y">${ratio} · ${W}×${H}</span></div><p class="small dim mt stline">Creating a brand-new design…</p>`;
+        host.appendChild(card);
+        const cv = document.createElement('canvas'); cv.className = 'thumbcv';
+        let note = '';
+        try {
+          // Text-only generation: the uploaded thumbnail is NOT passed to the
+          // image model — the new design comes from the analysis alone.
+          const url = await geminiImage(redesignPrompt(st, i, text), null, modelRatio(), { onRetry: retryNote(b) });
+          const img = await loadImg(url);
+          cv.width = W; cv.height = H;
+          const x = cv.getContext('2d');
+          const sc = Math.max(W / img.width, H / img.height);
+          x.drawImage(img, (W - img.width * sc) / 2, (H - img.height * sc) / 2, img.width * sc, img.height * sc);
+          made++;
+        } catch {
+          // Fallback: designed background + exact text only — never the upload.
+          paintThumb(cv, st, text);
+          designed++;
+          note = '<p class="small dim mt">The image model did not answer for this one, so this is a designed background with your exact text.</p>';
+        }
+        card.querySelector('.stline')?.remove();
+        card.appendChild(cv);
+        if (note) card.insertAdjacentHTML('beforeend', note);
+        const dl = document.createElement('button'); dl.className = 'btn sm mt'; dl.textContent = 'Download this version';
+        dl.addEventListener('click', () => { const a = document.createElement('a'); a.download = `thumbnail-${ratio.replace(':', 'x')}-v${i + 1}.png`; a.href = cv.toDataURL('image/png'); a.click(); });
+        card.appendChild(dl);
+      }
+    } finally {
+      busy(b, false, 'Generate different versions');
+    }
+    toast(designed === 0
+      ? '6 brand-new versions made — same text on all, in ' + ratio + '.'
+      : `${made} new AI versions + ${designed} designed versions made — same text on all, in ${ratio}.`);
   });
   // Creator: AI background + your headline text design, composed at exact ratio size.
   on('cgo', 'click', async (e) => {
@@ -352,7 +389,7 @@ if (tool === 'thumbnail') {
       const [W, H] = RATIOS[ratio];
       let bg = null;
       try {
-        const url = await geminiImage(`YouTube thumbnail background art, ${$('cstyle').value} style, dramatic, high contrast, no text, no letters, no watermark: ${prompt || head}`, null, ratio, { onRetry: retryNote(b) });
+        const url = await geminiImage(`YouTube thumbnail background art, ${$('cstyle').value} style, dramatic, high contrast, no text, no letters, no watermark: ${prompt || head}`, null, modelRatio(), { onRetry: retryNote(b) });
         bg = await loadImg(url);
       } catch { /* gradient fallback below */ }
       const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
