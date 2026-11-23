@@ -39,29 +39,86 @@ async function callOnce(model, key, body, timeoutMs = 60000) {
       body: JSON.stringify(body), signal: ctl.signal,
     });
     const d = await r.json().catch(() => ({}));
-    if (!r.ok) { const e = new Error(d?.error?.message || `HTTP ${r.status}`); e.status = r.status; throw e; }
+    if (!r.ok) { const e = new Error(d?.error?.message || `HTTP ${r.status}`); e.status = r.status; e.body = d; throw e; }
     return d;
   } finally { clearTimeout(t); }
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const isRateLimit = (e) => !!e && (e.status === 429 || e.status === 503);
+// Waits between full rotation rounds when everything is rate-limited.
+const BACKOFF_MS = [4000, 12000, 30000];
+
+/** Google's own suggested wait after a 429, in ms (0 when it gives none). */
+function googleRetryMs(e) {
+  const details = e?.body?.error?.details || [];
+  for (const d of details) {
+    if (d && /RetryInfo/.test(d['@type'] || '') && d.retryDelay != null) {
+      const s = parseFloat(d.retryDelay);
+      if (Number.isFinite(s)) return Math.min(60000, Math.ceil(s * 1000));
+    }
+  }
+  const m = /retry in ([\d.]+)\s*s/i.exec(e?.message || '');
+  if (m) return Math.min(60000, Math.ceil(parseFloat(m[1]) * 1000));
+  return 0;
+}
+
+/**
+ * Run one Gemini request across model × key rotation with rate-limit
+ * absorption. extract(d) returns the useful value from a response, or a
+ * falsy value for a soft failure (HTTP 200 but nothing usable).
+ *
+ * Strategy: rotate through every model/key first — a 429/503 on one combo
+ * moves straight to the next. Only when a whole round was rate-limited do
+ * we wait (Google's own retryDelay when it gives one, otherwise ~4s, then
+ * ~12s, then ~30s) and retry just the rate-limited combos, up to 3 waits.
+ * The "free limit" error is thrown only after all of that is exhausted.
+ */
+async function callWithRotation({ models, keys, timeoutMs = 60000, makeBody, extract, failPrefix, emptyMessage, stopOnInvalidKey = true }) {
+  let last = null, rateError = null;
+  let pending = [];
+  for (const model of models) for (const key of keys) pending.push([model, key]);
+  for (let round = 0; round <= BACKOFF_MS.length && pending.length; round++) {
+    if (round > 0) await sleep(Math.max(BACKOFF_MS[round - 1], googleRetryMs(rateError)));
+    const retry = [];
+    for (const [model, key] of pending) {
+      try {
+        const d = await callOnce(model, key, makeBody(model, key), timeoutMs);
+        const value = extract(d);
+        if (value) return value;
+        // Soft failure: keep rotating, but don't retry this combo later.
+      } catch (e) {
+        if (stopOnInvalidKey && e.status === 400 && /API key not valid/i.test(e.message)) {
+          throw new Error('Google did not accept your Gemini key. Check it in Settings.');
+        }
+        last = e;
+        if (isRateLimit(e)) { retry.push([model, key]); rateError = e; }
+      }
+    }
+    pending = retry;
+  }
+  if (last) {
+    if (isRateLimit(last)) throw new Error('Your free Gemini limit is used up for now. Wait a little, or add another key in Settings.');
+    throw new Error(`${failPrefix}: ${last.message}`);
+  }
+  throw new Error(emptyMessage);
 }
 
 /** Text (and optional inline parts) call with key + model rotation. Returns text. */
 export async function geminiText(prompt, { json = false, parts = [], temperature = 0.6 } = {}) {
   const keys = getKeys();
   if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
-  let last;
-  for (const model of MODELS) {
-    for (const key of keys) {
-      try {
-        const body = { contents: [{ role: 'user', parts: [{ text: prompt }, ...parts] }], generationConfig: { temperature } };
-        if (json) body.generationConfig.responseMimeType = 'application/json';
-        const d = await callOnce(model, key, body);
-        const text = (d?.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
-        if (text) return text;
-      } catch (e) { last = e; if (e.status === 400 && /API key not valid/i.test(e.message)) throw new Error('Google did not accept your Gemini key. Check it in Settings.'); }
-    }
-  }
-  if (last?.status === 429) throw new Error('Your free Gemini limit is used up for now. Wait a little, or add another key in Settings.');
-  throw new Error(last ? `Gemini said: ${last.message}` : 'Gemini did not answer. Try again.');
+  return callWithRotation({
+    models: MODELS, keys, timeoutMs: 60000,
+    makeBody: () => {
+      const body = { contents: [{ role: 'user', parts: [{ text: prompt }, ...parts] }], generationConfig: { temperature } };
+      if (json) body.generationConfig.responseMimeType = 'application/json';
+      return body;
+    },
+    extract: (d) => (d?.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim() || null,
+    failPrefix: 'Gemini said',
+    emptyMessage: 'Gemini did not answer. Try again.',
+  });
 }
 
 export async function geminiJson(prompt, opts = {}) {
@@ -114,17 +171,21 @@ export async function geminiImage(prompt, imagePart = null, aspectRatio = null) 
   if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
   const parts = [{ text: prompt }];
   if (imagePart) parts.push(imagePart);
-  let last;
-  for (const key of keys) {
-    try {
+  return callWithRotation({
+    models: ['gemini-2.5-flash-image'], keys, timeoutMs: 120000,
+    makeBody: () => {
       const gc = { responseModalities: ['IMAGE'] };
       if (aspectRatio) gc.imageConfig = { aspectRatio };
-      const d = await callOnce('gemini-2.5-flash-image', key, { contents: [{ role: 'user', parts }], generationConfig: gc }, 120000);
+      return { contents: [{ role: 'user', parts }], generationConfig: gc };
+    },
+    extract: (d) => {
       const img = (d?.candidates?.[0]?.content?.parts || []).find(p => p.inlineData?.data);
-      if (img) return `data:${img.inlineData.mimeType || 'image/png'};base64,${img.inlineData.data}`;
-    } catch (e) { last = e; }
-  }
-  throw new Error(last ? `Image model: ${last.message}` : 'The image model did not answer.');
+      return img ? `data:${img.inlineData.mimeType || 'image/png'};base64,${img.inlineData.data}` : null;
+    },
+    failPrefix: 'Image model',
+    emptyMessage: 'The image model did not answer.',
+    stopOnInvalidKey: false,
+  });
 }
 
 /** Gemini's built-in voices for text-to-speech (prebuilt voice names). */
@@ -137,20 +198,17 @@ export const GEMINI_VOICES = ['Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir', 'Led
 export async function geminiParts(parts, { json = false, temperature = 0.5, models = MODELS, timeoutMs = 120000 } = {}) {
   const keys = getKeys();
   if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
-  let last;
-  for (const model of models) {
-    for (const key of keys) {
-      try {
-        const body = { contents: [{ role: 'user', parts }], generationConfig: { temperature } };
-        if (json) body.generationConfig.responseMimeType = 'application/json';
-        const d = await callOnce(model, key, body, timeoutMs);
-        const text = (d?.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
-        if (text) return text;
-      } catch (e) { last = e; if (e.status === 400 && /API key not valid/i.test(e.message)) throw new Error('Google did not accept your Gemini key. Check it in Settings.'); }
-    }
-  }
-  if (last?.status === 429) throw new Error('Your free Gemini limit is used up for now. Wait a little, or add another key in Settings.');
-  throw new Error(last ? `Gemini said: ${last.message}` : 'Gemini did not answer. Try again.');
+  return callWithRotation({
+    models, keys, timeoutMs,
+    makeBody: () => {
+      const body = { contents: [{ role: 'user', parts }], generationConfig: { temperature } };
+      if (json) body.generationConfig.responseMimeType = 'application/json';
+      return body;
+    },
+    extract: (d) => (d?.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim() || null,
+    failPrefix: 'Gemini said',
+    emptyMessage: 'Gemini did not answer. Try again.',
+  });
 }
 
 /** JSON variant of geminiParts. */
@@ -194,24 +252,25 @@ export async function fetchModelList(key) {
 export async function geminiTTS(text, voice = 'Kore') {
   const keys = getKeys();
   if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
-  let last;
-  for (const key of keys) {
-    try {
-      const body = {
-        contents: [{ role: 'user', parts: [{ text: String(text).slice(0, 4000) }] }],
-        generationConfig: {
-          responseModalities: ['AUDIO'],
-          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
-        },
-      };
-      const d = await callOnce('gemini-2.5-flash-preview-tts', key, body, 120000);
+  return callWithRotation({
+    models: ['gemini-2.5-flash-preview-tts'], keys, timeoutMs: 120000,
+    makeBody: () => ({
+      contents: [{ role: 'user', parts: [{ text: String(text).slice(0, 4000) }] }],
+      generationConfig: {
+        responseModalities: ['AUDIO'],
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+      },
+    }),
+    extract: (d) => {
       const part = (d?.candidates?.[0]?.content?.parts || []).find(p => p.inlineData?.data);
-      if (!part) throw new Error('The voice model returned no audio.');
+      if (!part) return null;
       const rate = Number(/rate=(\d+)/.exec(part.inlineData.mimeType || '')?.[1] || 24000);
       return new Blob([pcmToWav(part.inlineData.data, rate)], { type: 'audio/wav' });
-    } catch (e) { last = e; }
-  }
-  throw new Error(last ? `Voice model: ${last.message}` : 'The voice model did not answer.');
+    },
+    failPrefix: 'Voice model',
+    emptyMessage: 'The voice model did not answer.',
+    stopOnInvalidKey: false,
+  });
 }
 
 function pcmToWav(b64, rate) {
