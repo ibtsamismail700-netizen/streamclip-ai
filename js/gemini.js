@@ -3,6 +3,9 @@
 // browser straight to Google with the visitor's own key. The site has no key.
 const KEY_STORE = 'sc_gemini_keys_v1';
 const MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest'];
+// Plain text/JSON calls start with the models that carry the most free
+// quota, so everyday tools stay off the tightest limits longest.
+const TEXT_MODELS = ['gemini-2.0-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'];
 const BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
 export const getKeys = () => {
@@ -46,6 +49,11 @@ async function callOnce(model, key, body, timeoutMs = 60000) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const isRateLimit = (e) => !!e && (e.status === 429 || e.status === 503);
+// Hard ceilings so no single user action can spin forever: each fetch
+// attempt is aborted after ~25s, and rotation + retries together get
+// ~75s before the honest error is shown.
+const ATTEMPT_TIMEOUT_MS = 25000;
+const TOTAL_BUDGET_MS = 75000;
 // Waits between full rotation rounds when everything is rate-limited.
 const BACKOFF_MS = [4000, 12000, 30000];
 
@@ -55,11 +63,11 @@ function googleRetryMs(e) {
   for (const d of details) {
     if (d && /RetryInfo/.test(d['@type'] || '') && d.retryDelay != null) {
       const s = parseFloat(d.retryDelay);
-      if (Number.isFinite(s)) return Math.min(60000, Math.ceil(s * 1000));
+      if (Number.isFinite(s)) return Math.min(30000, Math.ceil(s * 1000));
     }
   }
   const m = /retry in ([\d.]+)\s*s/i.exec(e?.message || '');
-  if (m) return Math.min(60000, Math.ceil(parseFloat(m[1]) * 1000));
+  if (m) return Math.min(30000, Math.ceil(parseFloat(m[1]) * 1000));
   return 0;
 }
 
@@ -70,20 +78,35 @@ function googleRetryMs(e) {
  *
  * Strategy: rotate through every model/key first — a 429/503 on one combo
  * moves straight to the next. Only when a whole round was rate-limited do
- * we wait (Google's own retryDelay when it gives one, otherwise ~4s, then
- * ~12s, then ~30s) and retry just the rate-limited combos, up to 3 waits.
- * The "free limit" error is thrown only after all of that is exhausted.
+ * we wait (Google's own retryDelay when it gives one, capped at 30s,
+ * otherwise ~4s, then ~12s, then ~30s) and retry just the rate-limited
+ * combos, up to 3 waits. The "free limit" error is thrown only after all
+ * of that is exhausted.
+ *
+ * Two hard ceilings keep the wait honest: every attempt is aborted after
+ * ~25s (a stalled request moves on instead of hanging), and the whole
+ * call — rotation plus retries — gives up after ~75s. While a backoff
+ * wait runs, opts.onRetry({ attempt, total, waitMs }) fires so the UI can
+ * say "Google is busy — retrying…" instead of spinning in silence.
  */
-async function callWithRotation({ models, keys, timeoutMs = 60000, makeBody, extract, failPrefix, emptyMessage, stopOnInvalidKey = true }) {
+async function callWithRotation({ models, keys, timeoutMs = ATTEMPT_TIMEOUT_MS, makeBody, extract, failPrefix, emptyMessage, stopOnInvalidKey = true, onRetry = null }) {
+  const deadline = Date.now() + TOTAL_BUDGET_MS;
   let last = null, rateError = null;
   let pending = [];
   for (const model of models) for (const key of keys) pending.push([model, key]);
   for (let round = 0; round <= BACKOFF_MS.length && pending.length; round++) {
-    if (round > 0) await sleep(Math.max(BACKOFF_MS[round - 1], googleRetryMs(rateError)));
+    if (round > 0) {
+      const wait = Math.min(Math.max(BACKOFF_MS[round - 1], googleRetryMs(rateError)), deadline - Date.now());
+      if (wait <= 0) break;
+      if (onRetry) { try { onRetry({ attempt: round, total: BACKOFF_MS.length, waitMs: wait }); } catch { /* UI only */ } }
+      await sleep(wait);
+    }
     const retry = [];
     for (const [model, key] of pending) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
       try {
-        const d = await callOnce(model, key, makeBody(model, key), timeoutMs);
+        const d = await callOnce(model, key, makeBody(model, key), Math.min(timeoutMs, ATTEMPT_TIMEOUT_MS, remaining));
         const value = extract(d);
         if (value) return value;
         // Soft failure: keep rotating, but don't retry this combo later.
@@ -96,20 +119,22 @@ async function callWithRotation({ models, keys, timeoutMs = 60000, makeBody, ext
       }
     }
     pending = retry;
+    if (Date.now() >= deadline) break;
   }
   if (last) {
     if (isRateLimit(last)) throw new Error('Your free Gemini limit is used up for now. Wait a little, or add another key in Settings.');
+    if (last.name === 'AbortError') throw new Error('Google took too long to answer. Check your connection and try again.');
     throw new Error(`${failPrefix}: ${last.message}`);
   }
   throw new Error(emptyMessage);
 }
 
 /** Text (and optional inline parts) call with key + model rotation. Returns text. */
-export async function geminiText(prompt, { json = false, parts = [], temperature = 0.6 } = {}) {
+export async function geminiText(prompt, { json = false, parts = [], temperature = 0.6, onRetry = null } = {}) {
   const keys = getKeys();
   if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
   return callWithRotation({
-    models: MODELS, keys, timeoutMs: 60000,
+    models: TEXT_MODELS, keys, timeoutMs: 60000, onRetry,
     makeBody: () => {
       const body = { contents: [{ role: 'user', parts: [{ text: prompt }, ...parts] }], generationConfig: { temperature } };
       if (json) body.generationConfig.responseMimeType = 'application/json';
@@ -166,13 +191,13 @@ export async function testKey(key) {
 }
 
 /** Image generation attempt (Gemini image model). Returns a data URL or throws. */
-export async function geminiImage(prompt, imagePart = null, aspectRatio = null) {
+export async function geminiImage(prompt, imagePart = null, aspectRatio = null, { onRetry = null } = {}) {
   const keys = getKeys();
   if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
   const parts = [{ text: prompt }];
   if (imagePart) parts.push(imagePart);
   return callWithRotation({
-    models: ['gemini-2.5-flash-image'], keys, timeoutMs: 120000,
+    models: ['gemini-2.5-flash-image'], keys, timeoutMs: 120000, onRetry,
     makeBody: () => {
       const gc = { responseModalities: ['IMAGE'] };
       if (aspectRatio) gc.imageConfig = { aspectRatio };
@@ -195,11 +220,11 @@ export const GEMINI_VOICES = ['Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir', 'Led
  * General call with arbitrary content parts (text, inlineData, fileData…)
  * and key + model rotation. Returns the model's text.
  */
-export async function geminiParts(parts, { json = false, temperature = 0.5, models = MODELS, timeoutMs = 120000 } = {}) {
+export async function geminiParts(parts, { json = false, temperature = 0.5, models = MODELS, timeoutMs = 120000, onRetry = null } = {}) {
   const keys = getKeys();
   if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
   return callWithRotation({
-    models, keys, timeoutMs,
+    models, keys, timeoutMs, onRetry,
     makeBody: () => {
       const body = { contents: [{ role: 'user', parts }], generationConfig: { temperature } };
       if (json) body.generationConfig.responseMimeType = 'application/json';
@@ -227,14 +252,14 @@ export async function geminiPartsJson(parts, opts = {}) {
  * understanding). Optionally restrict attention to a time window in seconds
  * via videoMetadata offsets. Returns parsed JSON.
  */
-export async function geminiYouTubeJson(url, prompt, { startSec = null, endSec = null, timeoutMs = 240000 } = {}) {
+export async function geminiYouTubeJson(url, prompt, { startSec = null, endSec = null, timeoutMs = 240000, onRetry = null } = {}) {
   const part = { fileData: { fileUri: url, mimeType: 'video/*' } };
   if (startSec !== null || endSec !== null) {
     part.videoMetadata = {};
     if (startSec !== null) part.videoMetadata.startOffset = `${Math.max(0, Math.round(startSec))}s`;
     if (endSec !== null) part.videoMetadata.endOffset = `${Math.max(1, Math.round(endSec))}s`;
   }
-  return geminiPartsJson([part, { text: prompt }], { temperature: 0.4, timeoutMs });
+  return geminiPartsJson([part, { text: prompt }], { temperature: 0.4, timeoutMs, onRetry });
 }
 
 /** List the models a key can use (for the Settings "what your key unlocks" panel). */
@@ -249,11 +274,11 @@ export async function fetchModelList(key) {
  * Gemini text-to-speech. Returns a playable WAV Blob.
  * Gemini TTS answers with raw 16-bit PCM; we wrap it in a WAV header.
  */
-export async function geminiTTS(text, voice = 'Kore') {
+export async function geminiTTS(text, voice = 'Kore', { onRetry = null } = {}) {
   const keys = getKeys();
   if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
   return callWithRotation({
-    models: ['gemini-2.5-flash-preview-tts'], keys, timeoutMs: 120000,
+    models: ['gemini-2.5-flash-preview-tts'], keys, timeoutMs: 120000, onRetry,
     makeBody: () => ({
       contents: [{ role: 'user', parts: [{ text: String(text).slice(0, 4000) }] }],
       generationConfig: {
