@@ -2,11 +2,122 @@
 // Keys live only in this browser (localStorage). Every AI call goes from this
 // browser straight to Google with the visitor's own key. The site has no key.
 const KEY_STORE = 'sc_gemini_keys_v1';
-const MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest'];
-// Plain text/JSON calls start with the models that carry the most free
-// quota, so everyday tools stay off the tightest limits longest.
-const TEXT_MODELS = ['gemini-2.0-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'];
 const BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
+
+// Google retires model names for new keys without warning (the 2.x names
+// below stopped working for fresh keys in Nov 2026), so model names are
+// resolved DYNAMICALLY from the key's own model list — see resolveModelSets.
+// These static lists are only the fallback for when the list can't be
+// fetched (offline, blocked) or a kind classifies empty.
+const FALLBACK_MODELS = {
+  text: ['gemini-3.8-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash-lite'],
+  parts: ['gemini-3.8-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash-lite'],
+  image: ['gemini-2.5-flash-image'],
+  tts: ['gemini-2.5-flash-preview-tts'],
+};
+
+/* ---------------- Dynamic model resolution ----------------
+ * On first need we ask Google which models THIS key can actually use
+ * (fetchModelList), keep the ones that support generateContent, classify
+ * them into text / parts / image / tts sets, and cache the result per key
+ * in localStorage for 24h so a tool run costs no extra list call.
+ */
+const MODEL_CACHE_STORE = 'sc_models_v1';
+const MODEL_CACHE_TTL = 24 * 60 * 60 * 1000;
+const modelCacheMem = new Map();   // keyTag -> classified sets
+const modelInflight = new Map();   // keyTag -> Promise<sets>
+
+function keyTag(key) {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = ((h * 31) + key.charCodeAt(i)) >>> 0;
+  return h.toString(36) + '_' + key.slice(-4);
+}
+
+function readModelCache(tag) {
+  try {
+    const all = JSON.parse(localStorage.getItem(MODEL_CACHE_STORE) || '{}');
+    const e = all[tag];
+    if (e && e.sets && Date.now() - e.at < MODEL_CACHE_TTL) return e.sets;
+  } catch { /* cache is best-effort */ }
+  return null;
+}
+function writeModelCache(tag, sets) {
+  try {
+    const all = JSON.parse(localStorage.getItem(MODEL_CACHE_STORE) || '{}');
+    all[tag] = { at: Date.now(), sets };
+    localStorage.setItem(MODEL_CACHE_STORE, JSON.stringify(all));
+  } catch { /* cache is best-effort */ }
+}
+/** Drop a key's cached model sets (e.g. after Google says a model is gone). */
+function invalidateModelCache(key) {
+  const tag = keyTag(key);
+  modelCacheMem.delete(tag);
+  try {
+    const all = JSON.parse(localStorage.getItem(MODEL_CACHE_STORE) || '{}');
+    if (all[tag]) { delete all[tag]; localStorage.setItem(MODEL_CACHE_STORE, JSON.stringify(all)); }
+  } catch { /* cache is best-effort */ }
+}
+
+/** Classify a raw model list (from fetchModelList) into per-kind name sets. */
+function classifyModels(list) {
+  const names = (list || [])
+    .filter(m => m && Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+    .map(m => String(m.name || '').replace(/^models\//, ''))
+    .filter(Boolean);
+  // Text / parts / video: flash models that are not image or TTS variants.
+  // Preference: the exact current flash name, then any gemini-3 flash,
+  // then the high-quota lite, then whatever flash remains. Cap at 3.
+  const flash = names.filter(n => n.includes('flash') && !n.includes('image') && !n.includes('tts'));
+  const picked = [];
+  const tiers = [
+    flash.filter(n => n === 'gemini-3.8-flash'),
+    flash.filter(n => n.startsWith('gemini-3')),
+    flash.filter(n => n === 'gemini-2.5-flash-lite'),
+    flash,
+  ];
+  for (const tier of tiers) for (const n of tier) if (!picked.includes(n)) picked.push(n);
+  const text = picked.slice(0, 3);
+  // Image: anything with "image" in the name (Nano Banana family); the
+  // everyday (non-Pro) model first when both exist.
+  const imageAll = names.filter(n => n.includes('image'));
+  const image = [...imageAll.filter(n => !n.includes('pro')), ...imageAll.filter(n => n.includes('pro'))].slice(0, 2);
+  // TTS: anything with "tts" in the name.
+  const tts = names.filter(n => n.includes('tts')).slice(0, 2);
+  return { text, parts: text, image, tts };
+}
+
+async function resolveModelSets(key) {
+  const tag = keyTag(key);
+  if (modelCacheMem.has(tag)) return modelCacheMem.get(tag);
+  const cached = readModelCache(tag);
+  if (cached) { modelCacheMem.set(tag, cached); return cached; }
+  if (modelInflight.has(tag)) return modelInflight.get(tag);
+  const p = (async () => {
+    try {
+      const list = await Promise.race([
+        fetchModelList(key),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('model list timeout')), 10000)),
+      ]);
+      const sets = classifyModels(list);
+      for (const kind of ['text', 'parts', 'image', 'tts']) {
+        if (!sets[kind] || !sets[kind].length) sets[kind] = FALLBACK_MODELS[kind];
+      }
+      writeModelCache(tag, sets);
+      modelCacheMem.set(tag, sets);
+      return sets;
+    } catch {
+      return FALLBACK_MODELS; // list unreachable — static names; don't cache failures
+    } finally { modelInflight.delete(tag); }
+  })();
+  modelInflight.set(tag, p);
+  return p;
+}
+
+/** Model names of one kind ('text' | 'parts' | 'image' | 'tts') for these keys. */
+async function modelsFor(keys, kind) {
+  const sets = await resolveModelSets(keys[0]);
+  return sets[kind] && sets[kind].length ? sets[kind] : FALLBACK_MODELS[kind];
+}
 
 export const getKeys = () => {
   try { return JSON.parse(localStorage.getItem(KEY_STORE) || '[]').filter(k => typeof k === 'string' && k.length > 10); }
@@ -49,6 +160,11 @@ async function callOnce(model, key, body, timeoutMs = 60000) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const isRateLimit = (e) => !!e && (e.status === 429 || e.status === 503);
+// Google retiring / renaming a model answers 400/404 with wording like
+// "This model … is no longer available to new users" or "not found / not
+// supported". Such a model is dead for this key: never retry it, just move
+// on to the next model in the rotation.
+const isRetiredModel = (e) => !!e && (e.status === 400 || e.status === 404) && /no longer available|not found|not supported/i.test(e.message || '');
 // Hard ceilings so no single user action can spin forever: each fetch
 // attempt is aborted after ~25s, and rotation + retries together get
 // ~75s before the honest error is shown.
@@ -91,7 +207,7 @@ function googleRetryMs(e) {
  */
 async function callWithRotation({ models, keys, timeoutMs = ATTEMPT_TIMEOUT_MS, makeBody, extract, failPrefix, emptyMessage, stopOnInvalidKey = true, onRetry = null }) {
   const deadline = Date.now() + TOTAL_BUDGET_MS;
-  let last = null, rateError = null;
+  let last = null, rateError = null, retiredError = null;
   let pending = [];
   for (const model of models) for (const key of keys) pending.push([model, key]);
   for (let round = 0; round <= BACKOFF_MS.length && pending.length; round++) {
@@ -114,6 +230,14 @@ async function callWithRotation({ models, keys, timeoutMs = ATTEMPT_TIMEOUT_MS, 
         if (stopOnInvalidKey && e.status === 400 && /API key not valid/i.test(e.message)) {
           throw new Error('Google did not accept your Gemini key. Check it in Settings.');
         }
+        if (isRetiredModel(e)) {
+          // Dead model name: skip it for the rest of this call (it is not
+          // added to the backoff retry list) and drop the cached model
+          // list so the next call re-resolves what the key can really use.
+          retiredError = e;
+          invalidateModelCache(key);
+          continue;
+        }
         last = e;
         if (isRateLimit(e)) { retry.push([model, key]); rateError = e; }
       }
@@ -126,6 +250,10 @@ async function callWithRotation({ models, keys, timeoutMs = ATTEMPT_TIMEOUT_MS, 
     if (last.name === 'AbortError') throw new Error('Google took too long to answer. Check your connection and try again.');
     throw new Error(`${failPrefix}: ${last.message}`);
   }
+  if (retiredError) {
+    // Every model we tried was retired/unavailable for this key.
+    throw new Error('The models on your Gemini key are not available right now. Open Settings and refresh the model list, or add another key.');
+  }
   throw new Error(emptyMessage);
 }
 
@@ -133,8 +261,9 @@ async function callWithRotation({ models, keys, timeoutMs = ATTEMPT_TIMEOUT_MS, 
 export async function geminiText(prompt, { json = false, parts = [], temperature = 0.6, onRetry = null } = {}) {
   const keys = getKeys();
   if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
+  const models = await modelsFor(keys, 'text');
   return callWithRotation({
-    models: TEXT_MODELS, keys, timeoutMs: 60000, onRetry,
+    models, keys, timeoutMs: 60000, onRetry,
     makeBody: () => {
       const body = { contents: [{ role: 'user', parts: [{ text: prompt }, ...parts] }], generationConfig: { temperature } };
       if (json) body.generationConfig.responseMimeType = 'application/json';
@@ -171,7 +300,7 @@ export async function checkKey(key) {
     const msg = d?.error?.message || '';
     if ((r.status === 400 || r.status === 403) && /API key not valid|API_KEY_INVALID/i.test(msg)) return { state: 'rejected', message: msg };
   } catch { /* network failure — fall through to the generation check */ }
-  for (const model of MODELS) {
+  for (const model of FALLBACK_MODELS.text) {
     try {
       const d = await callOnce(model, key, { contents: [{ role: 'user', parts: [{ text: 'Reply with the single word: ok' }] }] }, 20000);
       const text = (d?.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
@@ -196,8 +325,9 @@ export async function geminiImage(prompt, imagePart = null, aspectRatio = null, 
   if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
   const parts = [{ text: prompt }];
   if (imagePart) parts.push(imagePart);
+  const models = await modelsFor(keys, 'image');
   return callWithRotation({
-    models: ['gemini-2.5-flash-image'], keys, timeoutMs: 120000, onRetry,
+    models, keys, timeoutMs: 120000, onRetry,
     makeBody: () => {
       const gc = { responseModalities: ['IMAGE'] };
       if (aspectRatio) gc.imageConfig = { aspectRatio };
@@ -220,11 +350,12 @@ export const GEMINI_VOICES = ['Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir', 'Led
  * General call with arbitrary content parts (text, inlineData, fileData…)
  * and key + model rotation. Returns the model's text.
  */
-export async function geminiParts(parts, { json = false, temperature = 0.5, models = MODELS, timeoutMs = 120000, onRetry = null } = {}) {
+export async function geminiParts(parts, { json = false, temperature = 0.5, models = null, timeoutMs = 120000, onRetry = null } = {}) {
   const keys = getKeys();
   if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
+  const useModels = models && models.length ? models : await modelsFor(keys, 'parts');
   return callWithRotation({
-    models, keys, timeoutMs, onRetry,
+    models: useModels, keys, timeoutMs, onRetry,
     makeBody: () => {
       const body = { contents: [{ role: 'user', parts }], generationConfig: { temperature } };
       if (json) body.generationConfig.responseMimeType = 'application/json';
@@ -277,8 +408,9 @@ export async function fetchModelList(key) {
 export async function geminiTTS(text, voice = 'Kore', { onRetry = null } = {}) {
   const keys = getKeys();
   if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
+  const models = await modelsFor(keys, 'tts');
   return callWithRotation({
-    models: ['gemini-2.5-flash-preview-tts'], keys, timeoutMs: 120000, onRetry,
+    models, keys, timeoutMs: 120000, onRetry,
     makeBody: () => ({
       contents: [{ role: 'user', parts: [{ text: String(text).slice(0, 4000) }] }],
       generationConfig: {
