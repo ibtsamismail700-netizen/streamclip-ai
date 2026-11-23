@@ -754,10 +754,28 @@ Narration per slide: 2-4 natural spoken sentences in the chosen language and ton
 
 /* ---------- Thumbnail Creator / Redesigner ---------- */
 if (tool === 'thumbnail') {
-  const RATIOS = { '16:9': [1280, 720], '9:16': [1080, 1920], '1:1': [1080, 1080], '4:3': [1280, 960], '3:4': [1080, 1440], '1.91:1': [1200, 628] };
-  // The image model has no 1.91:1 setting; ask it for 16:9 and crop to the exact 1200×628 canvas.
-  const modelRatio = () => (ratio === '1.91:1' ? '16:9' : ratio);
-  let ratio = '16:9';
+  // Output sizes, named by platform. ONE source of truth (sizeId) shared by
+  // both tabs; every generation run snapshots it ONCE via snapSize() and
+  // the snapshot drives the canvas, the card labels, the model aspect and
+  // the download names. (Before this, one mutable variable was captured
+  // once for labels but re-read live by the painter, the model-aspect
+  // helper and the download names — and it was silently shared across
+  // tabs — so a size could desync mid-run: 16:9 selected, 1.91:1 made.)
+  const SIZES = {
+    youtube:    { name: 'YouTube Thumbnail',    px: [1280, 720],  model: '16:9' },
+    shorts:     { name: 'Shorts / Reel / Story', px: [1080, 1920], model: '9:16' },
+    igpost:     { name: 'Instagram Post',       px: [1080, 1080], model: '1:1' },
+    igportrait: { name: 'Instagram Portrait',   px: [1080, 1350], model: '4:5' },
+    fbpost:     { name: 'Facebook Post',        px: [1200, 630],  model: '16:9' },
+    fbad:       { name: 'Facebook Ad',          px: [1200, 628],  model: '16:9' },
+    fbcover:    { name: 'Facebook Cover',       px: [1640, 924],  model: '16:9' },
+    classic:    { name: 'Classic',              px: [1280, 960],  model: '4:3' },
+  };
+  // The image model has no settings for the Facebook sizes (≈1.91:1) or the
+  // cover (≈16:9): ask it for 16:9 and let the exact-pixel canvas crop.
+  let sizeId = 'youtube';
+  const snapSize = () => { const s = SIZES[sizeId] || SIZES.youtube; return { id: sizeId in SIZES ? sizeId : 'youtube', name: s.name, W: s.px[0], H: s.px[1], model: s.model }; };
+  const sizeTag = (s) => `${s.name} · ${s.W}×${s.H}`;
   let file = null, analysis = null, analysisText = '';
   // Tabs
   const setTab = (which) => {
@@ -765,12 +783,14 @@ if (tool === 'thumbnail') {
     $('tab-redesigner').classList.toggle('on', which === 'redesigner');
     $('panel-creator').classList.toggle('hidden', which !== 'creator');
     $('panel-redesigner').classList.toggle('hidden', which !== 'redesigner');
+    paintRatios(); // the panel you land on always shows the true shared size
   };
   on('tab-creator', 'click', () => setTab('creator'));
   on('tab-redesigner', 'click', () => setTab('redesigner'));
-  // Ratio chips (both panels share one state)
-  const paintRatios = () => { document.querySelectorAll('[data-ratio]').forEach(c => c.classList.toggle('on', c.dataset.ratio === ratio)); const rl = $('ratiolabel'); if (rl) rl.textContent = ratio; };
-  document.querySelectorAll('[data-ratio]').forEach(c => c.addEventListener('click', () => { ratio = c.dataset.ratio; paintRatios(); }));
+  // Size chips (both panels share the one sizeId state; the highlighted
+  // chip is always repainted from that state, never tracked separately)
+  const paintRatios = () => { document.querySelectorAll('[data-size]').forEach(c => c.classList.toggle('on', c.dataset.size === sizeId)); const rl = $('ratiolabel'); if (rl) rl.textContent = sizeTag(snapSize()); };
+  document.querySelectorAll('[data-size]').forEach(c => c.addEventListener('click', () => { sizeId = c.dataset.size; paintRatios(); }));
   paintRatios();
   on('plusbtn', 'click', () => $('ratiopop').classList.toggle('hidden'));
   // Text colour swatches
@@ -789,41 +809,80 @@ if (tool === 'thumbnail') {
     try {
       const part = await fileToInline(file);
       const d = await geminiPartsJson([part, { text: `Analyse this YouTube thumbnail like a top thumbnail designer. Return JSON only:
-{"topic":"what the video is about","textOnThumbnail":"the EXACT text written on the thumbnail, word for word","subject":"the main subject/face/object","works":["what works, short"],"weak":["what is weak, short"],"directions":["4 redesign directions that look completely different from each other but keep the SAME text"]}` }], { temperature: 0.4, onRetry: retryNote(b) });
+{"topic":"what the video is about","textOnThumbnail":"ALL the text written on the thumbnail, word for word","headlineLines":["ONLY the 1-3 MAIN headline lines — the biggest, boldest words a viewer reads first, each line exactly as written"],"otherText":"every other word on the thumbnail that is NOT part of the headline (small print, form labels, button text, codes), or an empty string","subject":"the main subject/face/object","works":["what works, short"],"weak":["what is weak, short"],"directions":["4 redesign directions that look completely different from each other but keep the SAME headline text"]}` }], { temperature: 0.4, onRetry: retryNote(b) });
       analysis = d;
       for (const k of Object.keys(briefCache)) delete briefCache[k]; // new analysis — old designer briefs no longer apply
-      analysisText = d.textOnThumbnail || '';
+      briefsBroken = false; // and brief generation gets a fresh chance
+      // The text field defaults to the HEADLINE lines only (1-3 short
+      // lines). The rest of the thumbnail's text is analysis information,
+      // not thumbnail copy — dumping it all in produced unusable walls of
+      // text on the new versions.
+      const headLines = Array.isArray(d.headlineLines) ? d.headlineLines.map(s => String(s).trim()).filter(Boolean).slice(0, 3) : [];
+      analysisText = headLines.length ? headLines.join(', ') : (d.textOnThumbnail || '');
       if (analysisText && !$('ttext').value.trim()) $('ttext').value = analysisText;
       out('aresult', `<div class="outcard"><b>Analysis</b>
-        <p class="out mt"><b>Topic:</b> ${esc(d.topic || '')}\n<b>Text on it:</b> ${esc(d.textOnThumbnail || '(none found)')}\n<b>Main subject:</b> ${esc(d.subject || '')}</p>
+        <p class="out mt"><b>Topic:</b> ${esc(d.topic || '')}\n<b>Headline (goes on the new versions):</b> ${esc(headLines.length ? headLines.join(' · ') : (d.textOnThumbnail || '(none found)'))}\n<b>Other text on it (not copied):</b> ${esc(d.otherText || '(none)')}\n<b>Main subject:</b> ${esc(d.subject || '')}</p>
         ${(d.works || []).length ? `<b style="display:block" class="mt">What works</b><ul>${d.works.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
         ${(d.weak || []).length ? `<b style="display:block" class="mt">What is weak</b><ul>${d.weak.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
         ${(d.directions || []).length ? `<b style="display:block" class="mt">Redesign directions (used below)</b><ul>${d.directions.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
-        <p class="small dim mt">The text box below now holds the exact text from your thumbnail — every version keeps it word for word.</p></div>`);
+        <p class="small dim mt">The text box below now holds only the main headline lines — every version keeps those word for word. The smaller text from your thumbnail is listed above and is not copied into the redesigns.</p></div>`);
     } catch (err) { toast(err.message, true); }
     busy(b, false, 'Analyse thumbnail');
   });
-  // Canvas fallback painter: designed background + the exact text ONLY.
-  // It never draws the uploaded thumbnail — a redesign must be a new design.
-  function paintThumb(cv, st, text) {
-    const [W, H] = RATIOS[ratio]; cv.width = W; cv.height = H;
+  // Canvas fallback painter: designed background + the text ONLY, laid out
+  // like a thumbnail — never a text wall. The first line is the headline
+  // (very large), at most 2 supporting lines sit under it (smaller), and
+  // everything keeps real margins: nothing runs edge to edge. It never
+  // draws the uploaded thumbnail — a redesign must be a new design.
+  function paintThumb(cv, st, text, size) {
+    const { W, H } = size; cv.width = W; cv.height = H;
     const x = cv.getContext('2d');
     const g = x.createLinearGradient(0, 0, W, H); g.addColorStop(0, st.bg[0]); g.addColorStop(1, st.bg[1]);
     x.fillStyle = g; x.fillRect(0, 0, W, H);
-    const portrait = H > W;
-    const tx = portrait ? W * 0.06 : W * 0.05;
-    const tw = portrait ? W * 0.88 : W * 0.9;
-    const ty = H * 0.3;
-    x.fillStyle = st.accent; x.fillRect(tx, ty - H * 0.075, Math.min(260, tw * 0.45), Math.max(10, H * 0.018));
+    // Split the field into lines (analyse joins headline lines with ", ").
+    // Only the first 3 lines are ever painted, however much text is there.
+    const segs = String(text).split(/[,•\n]+/).map(s => s.trim()).filter(Boolean);
+    const raw = segs.length ? segs : [String(text).trim()];
+    const head = (raw[0] || '').toUpperCase();
+    const support = raw.slice(1, 3);
+    const mx = W * 0.07, maxW = W - mx * 2; // 7% margin on both sides
+    const fitFs = (txt, weight, start, min) => {
+      let fs = start;
+      x.font = `${weight} ${fs}px Poppins, Arial, sans-serif`;
+      while (fs > min && x.measureText(txt).width > maxW) { fs -= 4; x.font = `${weight} ${fs}px Poppins, Arial, sans-serif`; }
+      return fs;
+    };
+    const wrapAt = (txt, weight, fs, maxLines) => {
+      x.font = `${weight} ${fs}px Poppins, Arial, sans-serif`;
+      const words = txt.split(/\s+/); const lines = []; let line = '';
+      for (const w of words) { const t = line ? line + ' ' + w : w; if (x.measureText(t).width > maxW && line) { lines.push(line); line = w; } else line = t; }
+      if (line) lines.push(line);
+      return lines.slice(0, maxLines);
+    };
+    // Headline: shrink to fit on one line; wrap to two only at the floor size.
+    const headFs = fitFs(head, 900, Math.round(W * 0.13), Math.round(W * 0.045));
+    x.font = `900 ${headFs}px Poppins, Arial, sans-serif`;
+    const headLines = x.measureText(head).width <= maxW ? [head] : wrapAt(head, 900, headFs, 2);
+    const supFs = Math.max(16, Math.round(headFs * 0.42));
+    const supLines = [];
+    for (const s of support) for (const ln of wrapAt(s, 800, supFs, 2)) { if (supLines.length < 2) supLines.push(ln); }
+    const lh = headFs * 1.1, slh = supFs * 1.18;
+    const barH = Math.max(10, H * 0.018), gap = H * 0.035, barW = Math.min(280, maxW * 0.42);
+    const blockH = barH + gap + headLines.length * lh + (supLines.length ? gap * 0.8 + supLines.length * slh : 0) + gap + barH;
+    let yy = Math.max(H * 0.04, (H - blockH) / 2);
+    x.textAlign = 'left'; x.textBaseline = 'middle';
+    x.fillStyle = st.accent; x.fillRect(mx, yy, barW, barH);
+    yy += barH + gap;
     x.fillStyle = inkColor; x.strokeStyle = 'rgba(0,0,0,.85)'; x.lineWidth = Math.max(6, W * 0.008); x.lineJoin = 'round';
-    const fs = Math.round(W * (String(text).length > 18 ? 0.062 : 0.078));
-    x.font = `900 ${fs}px Poppins, Arial, sans-serif`; x.textAlign = 'left';
-    const words = String(text).toUpperCase().split(/\s+/); let line = '', yy = ty;
-    const lines = [];
-    for (const w of words) { const t = line ? line + ' ' + w : w; if (x.measureText(t).width > tw && line) { lines.push(line); line = w; } else line = t; }
-    if (line) lines.push(line);
-    for (const ln of lines.slice(0, 4)) { x.strokeText(ln, tx, yy); x.fillText(ln, tx, yy); yy += fs * 1.08; }
-    x.fillStyle = st.accent; x.fillRect(tx, yy + H * 0.01, Math.min(260, tw * 0.45), Math.max(10, H * 0.018));
+    x.font = `900 ${headFs}px Poppins, Arial, sans-serif`;
+    for (const ln of headLines) { x.strokeText(ln, mx, yy + lh / 2); x.fillText(ln, mx, yy + lh / 2); yy += lh; }
+    if (supLines.length) {
+      yy += gap * 0.8;
+      x.font = `800 ${supFs}px Poppins, Arial, sans-serif`; x.lineWidth = Math.max(4, W * 0.005);
+      for (const ln of supLines) { x.strokeText(ln, mx, yy + slh / 2); x.fillText(ln, mx, yy + slh / 2); yy += slh; }
+    }
+    yy += gap;
+    x.fillStyle = st.accent; x.fillRect(mx, yy, barW, barH);
     return cv;
   }
   const varStyles = [
@@ -852,6 +911,10 @@ High contrast, dramatic, instantly readable at small size, professional YouTube 
   // the image model then designs to the brief. Briefs are cached per style
   // (+ text + topic) so regenerating versions does not redo them.
   const briefCache = {};
+  // If a designer-brief call fails or stalls once, briefs are skipped for
+  // the rest of the run: six slow text calls must never eat the time and
+  // quota the actual image generation needs.
+  let briefsBroken = false;
   async function designerBrief(st, i, text) {
     const extra = (analysis?.directions || [])[i] || '';
     const key = `${i}|${text}|${analysis?.topic || ''}|${extra}`;
@@ -866,13 +929,19 @@ The design must be a completely new, original composition — never a copy of an
     return brief;
   }
   async function versionPrompt(st, i, text) {
-    try {
-      const brief = await designerBrief(st, i, text);
-      if (!brief) throw new Error('empty brief');
-      return `Design this YouTube thumbnail exactly to the following designer brief:\n${brief}\n\nThe thumbnail must show this EXACT text, word for word, spelled exactly, in huge bold letters that dominate the design: "${text}"\nProfessional YouTube thumbnail designed by a graphic designer — bold, high contrast, instantly readable at small size, full-frame original artwork edge to edge, no watermark.`;
-    } catch {
-      return redesignPrompt(st, i, text); // the brief is an enhancement — never block generation
+    if (!briefsBroken) {
+      try {
+        // Hard 20s ceiling on the brief: if it fails or stalls, generation
+        // proceeds with the direct prompt instead of waiting on text calls.
+        const brief = await Promise.race([
+          designerBrief(st, i, text),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('brief timeout')), 20000)),
+        ]);
+        if (!brief) throw new Error('empty brief');
+        return `Design this YouTube thumbnail exactly to the following designer brief:\n${brief}\n\nThe thumbnail must show this EXACT text, word for word, spelled exactly, in huge bold letters that dominate the design: "${text}"\nProfessional YouTube thumbnail designed by a graphic designer — bold, high contrast, instantly readable at small size, full-frame original artwork edge to edge, no watermark.`;
+      } catch { briefsBroken = true; } // one failure ends briefs for this run
     }
+    return redesignPrompt(st, i, text); // the brief is an enhancement — never block generation
   }
   on('makevars', 'click', async (e) => {
     if (!requireKey()) return;
@@ -881,13 +950,17 @@ The design must be a completely new, original composition — never a copy of an
     const b = e.currentTarget; busy(b, true);
     const host = $('vars'); host.innerHTML = '';
     const prog = makeProgress($('varprog'), ['Writing designer briefs', 'Creating the versions', 'Ready']);
-    const [W, H] = RATIOS[ratio];
+    // Snapshot the size ONCE for the whole run: canvas, labels, model
+    // aspect and download names all read this snapshot, so the run can
+    // never desync from the size the user picked.
+    const size = snapSize();
+    const { W, H } = size;
     let made = 0, designed = 0;
     try {
       for (let i = 0; i < varStyles.length; i++) {
         const st = varStyles[i];
         const card = document.createElement('div'); card.className = 'outcard';
-        card.innerHTML = `<div class="spread"><b>Version ${i + 1} — ${st.name}</b><span class="tag y">${ratio} · ${W}×${H}</span></div><p class="small dim mt stline">Creating a brand-new design…</p>`;
+        card.innerHTML = `<div class="spread"><b>Version ${i + 1} — ${st.name}</b><span class="tag y">${sizeTag(size)}</span></div><p class="small dim mt stline">Creating a brand-new design…</p>`;
         host.appendChild(card);
         const cv = document.createElement('canvas'); cv.className = 'thumbcv';
         let note = '';
@@ -902,24 +975,25 @@ The design must be a completely new, original composition — never a copy of an
           const prompt = await versionPrompt(st, i, text);
           prog.setStep(1, `Creating version ${i + 1} of ${varStyles.length}`);
           if (stline) stline.textContent = 'Creating a brand-new design…';
-          const url = await geminiImage(prompt, null, modelRatio(), { onRetry: retryNote(b) });
+          const url = await geminiImage(prompt, null, size.model, { onRetry: retryNote(b) });
           const img = await loadImg(url);
           cv.width = W; cv.height = H;
           const x = cv.getContext('2d');
           const sc = Math.max(W / img.width, H / img.height);
           x.drawImage(img, (W - img.width * sc) / 2, (H - img.height * sc) / 2, img.width * sc, img.height * sc);
           made++;
-        } catch {
-          // Fallback: designed background + exact text only — never the upload.
-          paintThumb(cv, st, text);
+        } catch (err) {
+          // Fallback — only after every image model was really tried, and
+          // the card shows Google's REAL error, not a generic shrug.
+          paintThumb(cv, st, text, size);
           designed++;
-          note = '<p class="small dim mt">The image model did not answer for this one, so this is a designed background with your exact text.</p>';
+          note = `<p class="small dim mt">${esc(err.message)}<br>This version fell back to a designed background with your headline text.</p>`;
         }
         card.querySelector('.stline')?.remove();
         card.appendChild(cv);
         if (note) card.insertAdjacentHTML('beforeend', note);
         const dl = document.createElement('button'); dl.className = 'btn sm mt'; dl.textContent = 'Download this version';
-        dl.addEventListener('click', () => { const a = document.createElement('a'); a.download = `thumbnail-${ratio.replace(':', 'x')}-v${i + 1}.png`; a.href = cv.toDataURL('image/png'); a.click(); });
+        dl.addEventListener('click', () => { const a = document.createElement('a'); a.download = `thumbnail-${size.id}-v${i + 1}.png`; a.href = cv.toDataURL('image/png'); a.click(); });
         card.appendChild(dl);
         prog.setFraction((i + 1) / varStyles.length);
       }
@@ -928,8 +1002,8 @@ The design must be a completely new, original composition — never a copy of an
       busy(b, false, 'Generate different versions');
     }
     toast(designed === 0
-      ? '6 brand-new versions made — same text on all, in ' + ratio + '.'
-      : `${made} new AI versions + ${designed} designed versions made — same text on all, in ${ratio}.`);
+      ? `6 brand-new versions made — same text on all, at ${sizeTag(size)}.`
+      : `${made} new AI versions + ${designed} designed versions made — same text on all, at ${sizeTag(size)}.`);
   });
   // Creator options: every chip below feeds the design prompt and/or the
   // canvas composition — text style changes how the headline is drawn,
@@ -963,8 +1037,8 @@ The design must be a completely new, original composition — never a copy of an
     if (line) lines.push(line);
     return lines;
   }
-  function composeThumb(bg, head, sub) {
-    const [W, H] = RATIOS[ratio];
+  function composeThumb(bg, head, sub, size) {
+    const { W, H } = size;
     const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     const x = cv.getContext('2d');
     const sch = SCHEMES[cScheme] || SCHEMES.auto;
@@ -1028,29 +1102,30 @@ The design must be a completely new, original composition — never a copy of an
         } catch { /* headline simply stays empty */ }
       }
       prog.setStep(1);
-      const [W, H] = RATIOS[ratio];
+      // Same rule as the Redesigner: one size snapshot for the whole run.
+      const size = snapSize();
       const sch = SCHEMES[cScheme] || SCHEMES.auto;
       out('cresult', '');
       const host = $('cresult');
-      let madeAI = 0;
+      let madeAI = 0, lastBgErr = '';
       for (let v = 0; v < cVers; v++) {
         prog.setStep(1, cVers > 1 ? `Creating version ${v + 1} of ${cVers}` : 'Creating the thumbnail');
-        let bg = null;
+        let bg = null, bgErr = '';
         try {
-          const url = await geminiImage(`YouTube thumbnail background art designed by a graphic designer. Scene: ${prompt || head}. Art style: ${$('cstyle').value}. Colour palette: ${sch.palette}. ${BG_PHRASE[cBg] || ''} ${SUBJ_PHRASE[cSubject] || ''}${cVers > 1 ? ` Composition: ${VAR_ANGLES[v % VAR_ANGLES.length]}.` : ''} Dramatic, high contrast, no text, no letters, no watermark.`, null, modelRatio(), { onRetry: retryNote(b) });
+          const url = await geminiImage(`YouTube thumbnail background art designed by a graphic designer. Scene: ${prompt || head}. Art style: ${$('cstyle').value}. Colour palette: ${sch.palette}. ${BG_PHRASE[cBg] || ''} ${SUBJ_PHRASE[cSubject] || ''}${cVers > 1 ? ` Composition: ${VAR_ANGLES[v % VAR_ANGLES.length]}.` : ''} Dramatic, high contrast, no text, no letters, no watermark.`, null, size.model, { onRetry: retryNote(b) });
           bg = await loadImg(url); madeAI++;
-        } catch { /* designed-gradient fallback in composeThumb */ }
-        const cv = composeThumb(bg, head, sub);
+        } catch (err) { bgErr = err.message; lastBgErr = bgErr; /* designed-gradient fallback in composeThumb, real error shown on the card */ }
+        const cv = composeThumb(bg, head, sub, size);
         const card = document.createElement('div'); card.className = 'outcard';
-        card.innerHTML = `<div class="spread"><b>${cVers > 1 ? `Version ${v + 1}` : 'Your thumbnail'}</b><span class="tag y">${ratio} · ${W}×${H}px</span></div><p class="small dim mt">${esc(TSTYLE_NAMES[cTStyle])} text · ${esc(sch.name)} scheme · ${esc(BG_NAMES[cBg])} · ${esc(SUBJ_NAMES[cSubject])}${bg ? '' : ' · designed background (image model did not answer)'}</p>`;
+        card.innerHTML = `<div class="spread"><b>${cVers > 1 ? `Version ${v + 1}` : 'Your thumbnail'}</b><span class="tag y">${sizeTag(size)}</span></div><p class="small dim mt">${esc(TSTYLE_NAMES[cTStyle])} text · ${esc(sch.name)} scheme · ${esc(BG_NAMES[cBg])} · ${esc(SUBJ_NAMES[cSubject])}${bg ? '' : ' · designed background'}</p>${bg ? '' : `<p class="small dim mt">${esc(bgErr)}</p>`}`;
         cv.className = 'thumbcv'; card.appendChild(cv);
         const dl = document.createElement('button'); dl.className = 'btn sm mt'; dl.textContent = 'Download thumbnail (PNG)';
-        dl.addEventListener('click', () => { const a = document.createElement('a'); a.download = `thumbnail-${ratio.replace(':', 'x')}${cVers > 1 ? `-v${v + 1}` : ''}.png`; a.href = cv.toDataURL('image/png'); a.click(); });
+        dl.addEventListener('click', () => { const a = document.createElement('a'); a.download = `thumbnail-${size.id}${cVers > 1 ? `-v${v + 1}` : ''}.png`; a.href = cv.toDataURL('image/png'); a.click(); });
         card.appendChild(dl); host.appendChild(card);
         prog.setFraction((v + 1) / cVers);
       }
       prog.done();
-      toast(madeAI ? `${cVers} thumbnail version${cVers > 1 ? 's' : ''} made at ${ratio} — same design choices on each.` : 'Made with designed backgrounds (the image model did not answer).');
+      toast(madeAI ? `${cVers} thumbnail version${cVers > 1 ? 's' : ''} made at ${sizeTag(size)} — same design choices on each.` : (lastBgErr || 'The image model did not answer.'), !madeAI);
     } catch (err) { prog.fail(err.message); toast(err.message, true); }
     busy(b, false, 'Create thumbnail');
   });
@@ -1390,7 +1465,8 @@ if (tool === 'clipper') {
     };
   }
   function briefText(picks) {
-    return picks.map((m, i) => {
+    const head = `# StreamClip AI — shorts production plan\nThis is the production plan for your shorts — not a video file. The Watch links open each scene on YouTube.\n\n`;
+    return head + picks.map((m, i) => {
       const br = momentBrief(m);
       return `## Short ${i + 1}: ${br.title}\n- Time: ${br.time} (score ${br.score})\n- Quality: ${br.quality}\n- Watch this scene: ${br.watch || '—'}\n- Cut: ${br.cut}\n- Hook: ${br.hook || '—'}\n- Frame: ${br.frame}\n- Captions: ${br.captions}\n- Voice: ${br.voice} (${br.voiceVolumes})\n- Music: ${br.music}\n- Top text: ${br.topText}\n- Overlays: ${br.overlays.join('; ') || 'none'}\n- Posting caption: ${br.postCaption || '—'}`;
     }).join('\n\n');
@@ -1406,8 +1482,8 @@ if (tool === 'clipper') {
       <p class="small mt"><b>Cut:</b> ${esc(br.cut)}<br><b>Quality:</b> ${esc(br.quality)}<br><b>Hook:</b> ${esc(br.hook || '—')}<br><b>Frame:</b> ${esc(br.frame)}<br><b>Captions:</b> ${esc(br.captions)}<br><b>Voice:</b> ${esc(br.voice)} (${esc(br.voiceVolumes)})<br><b>Music:</b> ${esc(br.music)}<br><b>Top text:</b> ${esc(br.topText)}${br.overlays.length ? `<br><b>Overlays:</b> ${esc(br.overlays.join('; '))}` : ''}${br.postCaption ? `<br><b>Posting caption:</b> ${esc(br.postCaption)}` : ''}</p>
       <button class="chip mt" data-editb="${found.indexOf(m)}">Open editor</button></div>`;
     }).join('') +
-      `<div class="note mt"><div><b>Render queue.</b><div class="small dim">These briefs are saved for the render engine — the final downloadable videos are queued, not rendered here, because this website does not run a render engine yet. Nothing above fakes a finished file.</div></div></div>
-      <div class="btns two mt"><button class="btn sm" id="copybrief">Copy brief</button><button class="btn dark sm" id="dlbrief">Download brief (.md)</button></div>`;
+      `<div class="note mt"><div><b>Render queue.</b><div class="small dim">These briefs are saved for the render engine — the final downloadable videos are queued, not rendered here, because this website does not run a render engine yet. Nothing above fakes a finished file.</div><div class="small dim mt">This is the production plan for your shorts — not a video file. The Watch links open each scene on YouTube.</div></div></div>
+      <div class="btns two mt"><button class="btn sm" id="copybrief">Copy brief</button><button class="btn dark sm" id="dlbrief">Download plan (.md)</button></div>`;
     host.querySelectorAll('[data-editb]').forEach(btn => btn.addEventListener('click', () => { const m = found[Number(btn.dataset.editb)]; if (m && editorHandle) editorHandle.open(m); }));
     on('copybrief', 'click', () => copyText(briefText(picks), 'Brief copied.'));
     on('dlbrief', 'click', () => download('streamclip-brief.md', briefText(picks), 'text/markdown'));

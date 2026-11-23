@@ -80,7 +80,7 @@ function classifyModels(list) {
   // Image: anything with "image" in the name (Nano Banana family); the
   // everyday (non-Pro) model first when both exist.
   const imageAll = names.filter(n => n.includes('image'));
-  const image = [...imageAll.filter(n => !n.includes('pro')), ...imageAll.filter(n => n.includes('pro'))].slice(0, 2);
+  const image = [...imageAll.filter(n => !n.includes('pro')), ...imageAll.filter(n => n.includes('pro'))].slice(0, 4);
   // TTS: anything with "tts" in the name.
   const tts = names.filter(n => n.includes('tts')).slice(0, 2);
   return { text, parts: text, image, tts };
@@ -326,28 +326,81 @@ export async function testKey(key) {
   return r.state === 'verified';
 }
 
-/** Image generation attempt (Gemini image model). Returns a data URL or throws. */
+/** Why an HTTP-200 image response carried no image — the real reason,
+ * surfaced to the user instead of a generic "did not answer". */
+function noImageReason(d) {
+  const blocked = d?.promptFeedback?.blockReason;
+  if (blocked) return `Google blocked the prompt (${blocked})`;
+  const cand = d?.candidates?.[0];
+  const txt = (cand?.content?.parts || []).map(p => p.text || '').join(' ').trim();
+  if (txt) return `the model replied with text instead of an image: "${txt.slice(0, 140)}"`;
+  if (cand?.finishReason && cand.finishReason !== 'STOP') return `the model stopped without an image (finishReason: ${cand.finishReason})`;
+  return 'the model returned no image data';
+}
+
+/**
+ * Image generation (Gemini image models). Returns a data URL or throws an
+ * Error carrying Google's REAL message ("Image model error: …").
+ *
+ * This deliberately does NOT use callWithRotation: that helper caps every
+ * attempt at ~25s (image generation routinely takes longer, so attempts
+ * were aborted and the failure collapsed into a generic "did not
+ * answer"), and it discards soft-failure detail. Here EVERY image-capable
+ * model from the key's resolved list is tried in turn, each with its own
+ * attempt budget: one pass over the keys at a 60s per-attempt timeout,
+ * plus one retry pass when Google rate-limited (429/503) the first pass.
+ * Retired model names are skipped for the rest of the call and the cached
+ * model list is dropped, exactly as in callWithRotation.
+ */
 export async function geminiImage(prompt, imagePart = null, aspectRatio = null, { onRetry = null } = {}) {
   const keys = getKeys();
   if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
   const parts = [{ text: prompt }];
   if (imagePart) parts.push(imagePart);
-  const models = await modelsFor(keys, 'image');
-  return callWithRotation({
-    models, keys, timeoutMs: 120000, onRetry,
-    makeBody: () => {
-      const gc = { responseModalities: ['IMAGE'] };
-      if (aspectRatio) gc.imageConfig = { aspectRatio };
-      return { contents: [{ role: 'user', parts }], generationConfig: gc };
-    },
-    extract: (d) => {
-      const img = (d?.candidates?.[0]?.content?.parts || []).find(p => p.inlineData?.data);
-      return img ? `data:${img.inlineData.mimeType || 'image/png'};base64,${img.inlineData.data}` : null;
-    },
-    failPrefix: 'Image model',
-    emptyMessage: 'The image model did not answer.',
-    stopOnInvalidKey: false,
-  });
+  const gc = { responseModalities: ['IMAGE'] };
+  if (aspectRatio) gc.imageConfig = { aspectRatio };
+  const body = { contents: [{ role: 'user', parts }], generationConfig: gc };
+  const models = [...await modelsFor(keys, 'image')];
+  for (const f of FALLBACK_MODELS.image) if (!models.includes(f)) models.push(f);
+  const failures = [];
+  for (const model of models) {
+    let lastErr = null, soft = null, rateLimited = false;
+    for (let pass = 0; pass < 2; pass++) {
+      if (pass > 0) {
+        const wait = Math.min(15000, Math.max(4000, googleRetryMs(lastErr)));
+        if (onRetry) { try { onRetry({ attempt: pass, total: 1, waitMs: wait }); } catch { /* UI only */ } }
+        await sleep(wait);
+      }
+      rateLimited = false;
+      for (const key of keys) {
+        try {
+          const d = await callOnce(model, key, body, 60000);
+          const img = (d?.candidates?.[0]?.content?.parts || []).find(p => p.inlineData?.data);
+          if (img) return `data:${img.inlineData.mimeType || 'image/png'};base64,${img.inlineData.data}`;
+          soft = noImageReason(d); // HTTP 200 but no image — record why, try the next combo
+        } catch (e) {
+          if (e.status === 400 && /API key not valid/i.test(e.message)) {
+            throw new Error('Google did not accept your Gemini key. Check it in Settings.');
+          }
+          lastErr = e;
+          if (isRetiredModel(e)) { invalidateModelCache(key); break; }
+          if (isRateLimit(e)) { rateLimited = true; continue; }
+          break; // hard error for this model — recorded below; move to the next model
+        }
+      }
+      if (!rateLimited) break;
+    }
+    failures.push({ model, err: lastErr, soft });
+  }
+  // Surface the REAL failure: a concrete Google error first, then a soft
+  // (no-image) reason, then a rate-limit message — never a generic shrug.
+  const hard = failures.find(f => f.err && !isRateLimit(f.err));
+  if (hard) throw new Error(`Image model error: ${hard.err.status ? `HTTP ${hard.err.status} — ` : ''}${hard.err.message} (model: ${hard.model})`);
+  const softF = failures.find(f => f.soft);
+  if (softF) throw new Error(`Image model error: ${softF.soft} (model: ${softF.model})`);
+  const rate = failures.find(f => f.err);
+  if (rate) throw new Error(`Image model error: HTTP ${rate.err.status || 429} — ${rate.err.message} (model: ${rate.model})`);
+  throw new Error('Image model error: no image model on your key answered. Open Settings and refresh the model list, or add another key.');
 }
 
 /** Gemini's built-in voices for text-to-speech (prebuilt voice names). */
