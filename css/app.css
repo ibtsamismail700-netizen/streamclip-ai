@@ -129,6 +129,8 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .tag.live { background: var(--red); color: #fff; }
 .tag.live::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: blink 1.2s infinite; }
 .tag.y { background: rgba(255, 200, 31, .16); color: var(--y1); }
+.tag.ok { background: rgba(53, 214, 133, .14); color: #35d685; }
+.tag.rest { background: rgba(255, 176, 32, .16); color: #ffb020; }
 .card.gold .tag { background: rgba(42, 31, 0, .12); color: var(--ydark); }
 @keyframes blink { 50% { opacity: .25; } }
 

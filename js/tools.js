@@ -6,14 +6,29 @@ import { initEditor } from './editor.js';
 const $ = (id) => document.getElementById(id);
 const tool = document.body.dataset.tool;
 const busy = (btn, on, label) => { btn.disabled = on; btn.innerHTML = on ? '<span class="spin"></span> Working…' : label; };
-// Visible retry progress: when Google rate-limits a call, gemini.js waits
-// and retries — this callback makes the wait VISIBLE on the busy button
-// (and a status line, when the tool has one) instead of a silent spinner.
-const retryNote = (btn, el) => ({ attempt, total }) => {
-  const msg = `Google is busy — retrying (${attempt}/${total})…`;
+// Visible retry progress: when every free pair is resting after a 429,
+// gemini.js waits ONCE for the earliest quota reset — this callback makes
+// that wait VISIBLE on the busy button (and a status line, when the tool
+// has one) instead of a silent spinner. gemini.js sends the exact line in
+// `message` ("All free limits are resting — continuing in Ns…").
+const retryMsg = (info) => info?.message || `Google is busy — retrying (${info?.attempt}/${info?.total})…`;
+const retryNote = (btn, el) => (info) => {
+  const msg = retryMsg(info);
   if (btn) btn.innerHTML = `<span class="spin"></span> ${msg}`;
   if (el) el.textContent = msg;
 };
+/* ----- AlphaPost-pattern pacing -----
+ * AlphaPost keeps one free key happy by making FEW, SPACED calls inside
+ * slow background jobs. Our heavy loops do the same: a short breather
+ * (~2s) between sequential Gemini calls, and a longer one (~8s) after a
+ * call that hit the free limit — so bursts never slam the per-minute
+ * quota, and after a 429 the next loop call lands on a DIFFERENT pair
+ * (the exhausted one is cooling and gets skipped). The first call of a
+ * task is never paced — it fires instantly — and the progress ring keeps
+ * advancing, so the breather reads as steady work, not a hang. */
+const pace = (ms) => new Promise((r) => setTimeout(r, ms));
+const hitLimit = (e) => !!e && /limit is used up|quota|429|rate/i.test(e.message || '');
+const breather = (prevErr) => pace(prevErr && hitLimit(prevErr) ? 8000 : 2000);
 /* ---------- Job progress ring (shared, AlphaPost-style) ----------
  * Honest progress only: the % is steps completed plus a within-step
  * fraction ONLY where the code truly knows it (scan windows done, versions
@@ -200,7 +215,7 @@ if (STUDENT_TOOLS.includes(tool)) {
       sstep('ss2', 'now', 'Gemini is watching the whole lecture…');
       prog.setStep(1);
       const d = await geminiPartsJson([{ fileData: { fileUri: link, mimeType: 'video/*' } }, { text: `Watch this whole lecture video carefully. Return JSON only: {"title":"...","durationSec":0,"chapters":[{"title":"...","startSec":0}]}
-title: the lecture's real title. durationSec: its total length in seconds (0 only if you truly cannot tell). chapters: the main topics in the EXACT order they are taught (never reshuffled), each with startSec = the second from the video start where that topic begins. Up to 12 chapters.` }], { temperature: 0.3, timeoutMs: 240000, onRetry: ({ attempt, total }) => sstep('ss2', 'now', `Google is busy — retrying (${attempt}/${total})…`) });
+title: the lecture's real title. durationSec: its total length in seconds (0 only if you truly cannot tell). chapters: the main topics in the EXACT order they are taught (never reshuffled), each with startSec = the second from the video start where that topic begins. Up to 12 chapters.` }], { temperature: 0.3, timeoutMs: 240000, onRetry: (info) => sstep('ss2', 'now', retryMsg(info)) });
       sstep('ss2', 'ok', 'Lecture watched');
       const chapters = (d.chapters || []).map(c => ({ title: String(c.title || 'Topic'), startSec: parseTs(c.startSec) })).filter(c => c.title);
       setSource({ type: 'youtube', link, videoId: id, title: d.title || '', durationSec: Number(d.durationSec) || 0, chapters, ready: true });
@@ -233,7 +248,7 @@ title: the lecture's real title. durationSec: its total length in seconds (0 onl
       sstep('ps2', 'now', 'Gemini is extracting the full text…');
       prog.setStep(1);
       const d = await geminiPartsJson([part, { text: `Extract the content of this PDF document for a student. Return JSON only: {"text":"...","sections":["..."],"pageCount":0}
-text: the FULL text of the document in reading order — do not summarise, skip or shorten it; keep headings on their own lines. sections: the main section headings, in the document's own order. pageCount: the number of pages in this PDF if you can tell, otherwise 0.` }], { temperature: 0.2, timeoutMs: 240000, onRetry: ({ attempt, total }) => sstep('ps2', 'now', `Google is busy — retrying (${attempt}/${total})…`) });
+text: the FULL text of the document in reading order — do not summarise, skip or shorten it; keep headings on their own lines. sections: the main section headings, in the document's own order. pageCount: the number of pages in this PDF if you can tell, otherwise 0.` }], { temperature: 0.2, timeoutMs: 240000, onRetry: (info) => sstep('ps2', 'now', retryMsg(info)) });
       const text = String(d.text || '').trim();
       if (text.length < 80) throw new Error('No readable text came out of this PDF. If it is scanned images, paste the text instead.');
       sstep('ps2', 'ok', 'Text extracted');
@@ -438,6 +453,7 @@ if (tool === 'translate') {
       const chunks = chunkText(text, 4500);
       const parts = [];
       for (let i = 0; i < chunks.length; i++) {
+        if (i > 0) await breather(null); // pacing: space the chunk calls out
         if (st) st.textContent = chunks.length > 1 ? `Translating part ${i + 1} of ${chunks.length}…` : 'Translating…';
         parts.push(await geminiText(`Translate these video captions from ${$('sfrom').value} into ${$('lang').value}. Style: ${$('tstyle').value}. Caption formatting: ${SRT_STYLE[$('srtstyle').value] || SRT_STYLE['Clean full lines']} Keep every timestamp exactly as it is. Translate only the spoken words. Do not add explanations, do not wrap in code fences.\n\n${chunks[i]}`, { temperature: 0.3, onRetry: retryNote(b, st) }));
       }
@@ -738,7 +754,7 @@ Narration per slide: 2-4 natural spoken sentences in the chosen language and ton
         const s = (d.slides || [])[i]; if (!s) return;
         try {
           toast('Generating the AI voice…');
-          const blob = await geminiTTS(s.narration, vsel ? vsel.value : 'Kore', { onRetry: ({ attempt, total }) => { const host = $(`aud-${i}`); if (host) host.textContent = `Google is busy — retrying the voice (${attempt}/${total})…`; } });
+          const blob = await geminiTTS(s.narration, vsel ? vsel.value : 'Kore', { onRetry: (info) => { const host = $(`aud-${i}`); if (host) host.textContent = info.message || `Google is busy — retrying the voice (${info.attempt}/${info.total})…`; } });
           const url = URL.createObjectURL(blob);
           if (dl) { const a = document.createElement('a'); a.href = url; a.download = `slide-${i + 1}-voice.wav`; a.click(); }
           else { const host = $(`aud-${i}`); if (host) host.innerHTML = `<audio controls autoplay src="${url}" style="width:100%"></audio>`; }
@@ -955,9 +971,10 @@ The design must be a completely new, original composition — never a copy of an
     // never desync from the size the user picked.
     const size = snapSize();
     const { W, H } = size;
-    let made = 0, designed = 0;
+    let made = 0, designed = 0, prevErr = null;
     try {
       for (let i = 0; i < varStyles.length; i++) {
+        if (i > 0) await breather(prevErr); // pacing between versions (longer after a limit hit)
         const st = varStyles[i];
         const card = document.createElement('div'); card.className = 'outcard';
         card.innerHTML = `<div class="spread"><b>Version ${i + 1} — ${st.name}</b><span class="tag y">${sizeTag(size)}</span></div><p class="small dim mt stline">Creating a brand-new design…</p>`;
@@ -982,7 +999,9 @@ The design must be a completely new, original composition — never a copy of an
           const sc = Math.max(W / img.width, H / img.height);
           x.drawImage(img, (W - img.width * sc) / 2, (H - img.height * sc) / 2, img.width * sc, img.height * sc);
           made++;
+          prevErr = null;
         } catch (err) {
+          prevErr = err;
           // Fallback — only after every image model was really tried, and
           // the card shows Google's REAL error, not a generic shrug.
           paintThumb(cv, st, text, size);
@@ -1107,14 +1126,15 @@ The design must be a completely new, original composition — never a copy of an
       const sch = SCHEMES[cScheme] || SCHEMES.auto;
       out('cresult', '');
       const host = $('cresult');
-      let madeAI = 0, lastBgErr = '';
+      let madeAI = 0, lastBgErr = '', prevErr = null;
       for (let v = 0; v < cVers; v++) {
+        if (v > 0) await breather(prevErr); // pacing between versions (longer after a limit hit)
         prog.setStep(1, cVers > 1 ? `Creating version ${v + 1} of ${cVers}` : 'Creating the thumbnail');
         let bg = null, bgErr = '';
         try {
           const url = await geminiImage(`YouTube thumbnail background art designed by a graphic designer. Scene: ${prompt || head}. Art style: ${$('cstyle').value}. Colour palette: ${sch.palette}. ${BG_PHRASE[cBg] || ''} ${SUBJ_PHRASE[cSubject] || ''}${cVers > 1 ? ` Composition: ${VAR_ANGLES[v % VAR_ANGLES.length]}.` : ''} Dramatic, high contrast, no text, no letters, no watermark.`, null, size.model, { onRetry: retryNote(b) });
-          bg = await loadImg(url); madeAI++;
-        } catch (err) { bgErr = err.message; lastBgErr = bgErr; /* designed-gradient fallback in composeThumb, real error shown on the card */ }
+          bg = await loadImg(url); madeAI++; prevErr = null;
+        } catch (err) { bgErr = err.message; lastBgErr = bgErr; prevErr = err; /* designed-gradient fallback in composeThumb, real error shown on the card */ }
         const cv = composeThumb(bg, head, sub, size);
         const card = document.createElement('div'); card.className = 'outcard';
         card.innerHTML = `<div class="spread"><b>${cVers > 1 ? `Version ${v + 1}` : 'Your thumbnail'}</b><span class="tag y">${sizeTag(size)}</span></div><p class="small dim mt">${esc(TSTYLE_NAMES[cTStyle])} text · ${esc(sch.name)} scheme · ${esc(BG_NAMES[cBg])} · ${esc(SUBJ_NAMES[cSubject])}${bg ? '' : ' · designed background'}</p>${bg ? '' : `<p class="small dim mt">${esc(bgErr)}</p>`}`;
@@ -1510,7 +1530,7 @@ if (tool === 'clipper') {
     renderFound();
   }
   const stepEl = (id, state, text) => { const el = $(id); if (!el) return; el.className = 'step' + (state ? ' ' + state : ''); el.querySelector('span:last-child').textContent = text; };
-  const scanRetry = (id) => ({ attempt, total }) => stepEl(id, 'now', `Google is busy — retrying (${attempt}/${total})…`);
+  const scanRetry = (id) => (info) => stepEl(id, 'now', retryMsg(info));
   const PROBE_PROMPT = 'Return JSON only: {"durationSec": 0, "title": ""} — durationSec is the total length of this video in seconds (a number), title is its title. If you truly cannot tell the length, use 0.';
 
   /* ----- YouTube scan: Gemini watches the video in time windows ----- */
@@ -1572,20 +1592,23 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
         if (scanRange !== 'whole') stepEl('st2', 'now', 'Length unknown — scanning the whole video instead…');
         for (let w = 0; w < winsTotal; w++) winList.push([w * WIN, Math.min(total, w * WIN + WIN)]);
       }
-      let beyond = false, droppedTotal = 0;
+      let beyond = false, droppedTotal = 0, prevErr = null;
       for (let k = 0; k < winList.length && !beyond; k++) {
+        if (k > 0) await breather(prevErr); // pacing between window scans (longer after a limit hit)
         const [s, en] = winList[k];
         stepEl('st2', 'now', `Watching ${fmt(s)} – ${fmt(en)} (window ${k + 1} of ${winList.length})…`);
         prog.setStep(1); prog.setFraction(k / winList.length);
         try {
           const d = await scanWindow(url, s, en);
           if (d.beyondEnd) { beyond = true; break; }
+          prevErr = null;
           droppedTotal += addMoments(d.moments, s).dropped;
           scannedRanges.push([s, en]);
           found.sort((a, b2) => b2.score - a.score);
           renderFound();
           prog.setFraction((k + 1) / winList.length);
         } catch (err) {
+          prevErr = err;
           if (k === 0) throw err; // first window failing = the link itself failed
           stepEl('st2', 'now', `Window ${k + 1} could not be watched (${err.message}) — continuing…`);
         }
@@ -1656,6 +1679,7 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
     try {
       const chunks = chunkText(text, 9000);
       for (let i = 0; i < chunks.length; i++) {
+        if (i > 0) await breather(null); // pacing: space the chunk calls out
         if (st) st.textContent = `Scoring part ${i + 1} of ${chunks.length}… (${found.length} moments so far)`;
         const d = await geminiJson(`You are a top stream clipper. From this part of a stream transcript, pick the moments for viral Shorts. Return JSON only: {"items":[{"title":"catchy, max 60 chars","at":"timestamp as written in the text, or '—'","score":0,"hook":"3-7 punchy words","why":"one short line"}]} Score strictly 0-99. Skip silence, menus, sponsor talk, intros. Transcript part:\n${chunks[i]}`, { onRetry: retryNote(null, st) });
         for (const m of (d.items || [])) found.push({ startSec: parseTs(m.at), endSec: null, startLabel: m.at || '—', score: Math.max(0, Math.min(99, Number(m.score) || 0)), title: m.title || 'Moment', hook: m.hook || '', why: m.why || '', picked: false });
@@ -1718,7 +1742,7 @@ if (tool === 'lecture-clips') {
         sstep('lcst3', '', 'Collecting the key concepts');
         let durSec = SRC.durationSec || 0;
         if (!durSec) {
-          try { const p = await geminiYouTubeJson(SRC.link, LC_PROBE, { timeoutMs: 120000, onRetry: ({ attempt, total }) => sstep('lcst1', 'now', `Google is busy — retrying (${attempt}/${total})…`) }); durSec = Number(p.durationSec) || 0; } catch { /* windows below still run */ }
+          try { const p = await geminiYouTubeJson(SRC.link, LC_PROBE, { timeoutMs: 120000, onRetry: (info) => sstep('lcst1', 'now', retryMsg(info)) }); durSec = Number(p.durationSec) || 0; } catch { /* windows below still run */ }
         }
         sstep('lcst1', 'ok', durSec ? `Lecture found — ${fmt(durSec)} long` : 'Lecture accepted by Gemini');
         sstep('lcst2', 'now', 'Watching…');
@@ -1727,14 +1751,16 @@ if (tool === 'lecture-clips') {
         const total = durSec > 0 ? Math.min(durSec, 4 * 3600) : 3600;
         const wins = Math.max(1, Math.ceil(total / WIN));
         const items = [];
-        let beyond = false;
+        let beyond = false, prevErr = null;
         for (let k = 0; k < wins && !beyond; k++) {
+          if (k > 0) await breather(prevErr); // pacing between window scans (longer after a limit hit)
           const s = k * WIN, en = Math.min(total, s + WIN);
           sstep('lcst2', 'now', `Watching ${fmt(s)} – ${fmt(en)} (window ${k + 1} of ${wins})…`);
           try {
             const d = await geminiYouTubeJson(SRC.link, `Watch ONLY the segment of this lecture you were given (it starts at ${fmt(s)} of the full lecture). Find the key concepts a student must revise. Focus on: ${focus}. Return JSON only: {"beyondEnd": false, "items":[{"title":"concept name","startSec":0,"endSec":0,"why":"one line: why it matters for the exam","hook":"3-6 word memory hook"}]}
-startSec/endSec are seconds FROM THE START OF THIS SEGMENT. Up to 4 concepts per segment, in teaching order; each concept 30-60 seconds. If this segment is past the end of the lecture, return {"beyondEnd": true, "items": []}.`, { startSec: s, endSec: en, onRetry: ({ attempt, total }) => sstep('lcst2', 'now', `Google is busy — retrying (${attempt}/${total})…`) });
+startSec/endSec are seconds FROM THE START OF THIS SEGMENT. Up to 4 concepts per segment, in teaching order; each concept 30-60 seconds. If this segment is past the end of the lecture, return {"beyondEnd": true, "items": []}.`, { startSec: s, endSec: en, onRetry: (info) => sstep('lcst2', 'now', retryMsg(info)) });
             if (d.beyondEnd) { beyond = true; break; }
+            prevErr = null;
             for (const m of (d.items || [])) {
               const st = s + (parseTs(m.startSec) || 0);
               let en2 = m.endSec != null ? s + (parseTs(m.endSec) || 0) : null;
@@ -1746,6 +1772,7 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. Up to 4 concepts per
             out('lcresult', items.map(conceptCard).join(''));
             prog.setFraction((k + 1) / wins);
           } catch (err) {
+            prevErr = err;
             if (k === 0) throw err;
             sstep('lcst2', 'now', `Window ${k + 1} could not be watched (${err.message}) — continuing…`);
           }
@@ -1859,7 +1886,7 @@ Exactly ${mcqN} MCQs, ${shortN} short questions and ${longN} long/essay question
     try {
       const ctx = qaHist.slice(-3).map(x => `Earlier — Q: ${x.q}\nA: ${x.a}`).join('\n');
       const rule = `You are a tutor for this student's own lecture material. Answer the question using ONLY that material. If the material does not cover the answer, reply exactly: "This is not covered in this lecture." Answer in simple, clear words; add a tiny example only if the material itself has one.${ctx ? `\n${ctx}` : ''}\n\nQuestion: ${q}`;
-      const a = await sourceText(rule, { temperature: 0.35, onRetry: ({ attempt, total }) => { if (wait) wait.textContent = `Google is busy — retrying (${attempt}/${total})…`; } });
+      const a = await sourceText(rule, { temperature: 0.35, onRetry: (info) => { if (wait) wait.textContent = retryMsg(info); } });
       qaHist.push({ q, a });
       if (wait) wait.textContent = a;
     } catch (err) { if (wait) wait.textContent = 'That did not work: ' + err.message; }

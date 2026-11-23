@@ -1,5 +1,5 @@
 // StreamClip AI — shared helpers (toast) + Settings page logic.
-import { getKeys, addKey, removeKey, checkKey, fetchModelList, esc } from './gemini.js';
+import { getKeys, addKey, removeKey, checkKey, fetchModelList, getKeyRestInfo, esc } from './gemini.js';
 
 export function toast(msg, bad = false) {
   let t = document.querySelector('.toast');
@@ -15,14 +15,31 @@ window.__toast = toast;
 // Settings page (settings.html)
 const keyList = document.getElementById('keylist');
 if (keyList) {
+  const fmtClock = (ts) => { const d = new Date(ts); return [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join(':'); };
+  // Per-key status from the quota cooldown map: a key whose model hit the
+  // free limit shows "Resting until HH:MM:SS" while rotation works the
+  // other keys; it flips back to "Active" on its own when the rest ends.
+  const paintRest = () => {
+    const rest = getKeyRestInfo();
+    keyList.querySelectorAll('[data-rest]').forEach(el => {
+      const info = rest[Number(el.dataset.rest)];
+      if (info && info.until) { el.textContent = `Resting until ${fmtClock(info.until)}`; el.className = 'tag rest'; }
+      else { el.textContent = 'Active'; el.className = 'tag ok'; }
+    });
+  };
   const render = () => {
     const keys = getKeys();
     keyList.innerHTML = keys.length
-      ? keys.map((k, i) => `<div class="spread mt"><span class="tag">Key ${i + 1} · ••••${esc(k.slice(-6))}</span><button class="chip" data-del="${i}">Remove</button></div>`).join('')
+      ? keys.map((k, i) => `<div class="spread mt"><span class="tag">Key ${i + 1} · ••••${esc(k.slice(-6))}</span><span class="spread" style="gap:8px"><span class="tag ok" data-rest="${i}">Active</span><button class="chip" data-del="${i}">Remove</button></span></div>`).join('')
+        + (keys.length < 10 ? '<button class="chip mt" id="addanother">＋ Add another key</button>' : '')
       : '<p class="sub mt">No key added yet. Follow the steps below to create yours — it takes about a minute.</p>';
     keyList.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => { removeKey(Number(b.dataset.del)); render(); toast('Key removed.'); }));
+    const aa = document.getElementById('addanother');
+    if (aa) aa.addEventListener('click', () => { const inp = document.getElementById('keyinput'); if (inp) { inp.scrollIntoView({ behavior: 'smooth', block: 'center' }); inp.focus(); } });
+    paintRest();
   };
   render();
+  setInterval(paintRest, 5000); // keep Active/Resting live as cooldowns expire
   document.getElementById('addkey').addEventListener('click', async (ev) => {
     const input = document.getElementById('keyinput');
     const k = input.value.trim();

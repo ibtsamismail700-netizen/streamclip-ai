@@ -170,61 +170,180 @@ const isRetiredModel = (e) => !!e && (e.status === 400 || e.status === 404) && /
 // ~75s before the honest error is shown.
 const ATTEMPT_TIMEOUT_MS = 25000;
 const TOTAL_BUDGET_MS = 75000;
-// Waits between full rotation rounds when everything is rate-limited.
-const BACKOFF_MS = [4000, 12000, 30000];
 
 /** Google's own suggested wait after a 429, in ms (0 when it gives none). */
-function googleRetryMs(e) {
+function googleRetryMs(e, capMs = 30000) {
   const details = e?.body?.error?.details || [];
   for (const d of details) {
     if (d && /RetryInfo/.test(d['@type'] || '') && d.retryDelay != null) {
       const s = parseFloat(d.retryDelay);
-      if (Number.isFinite(s)) return Math.min(30000, Math.ceil(s * 1000));
+      if (Number.isFinite(s)) return Math.min(capMs, Math.ceil(s * 1000));
     }
   }
   const m = /retry in ([\d.]+)\s*s/i.exec(e?.message || '');
-  if (m) return Math.min(30000, Math.ceil(parseFloat(m[1]) * 1000));
+  if (m) return Math.min(capMs, Math.ceil(parseFloat(m[1]) * 1000));
   return 0;
 }
 
+/* ---------------- Quota cooldown map ----------------
+ * A free Gemini key has a small PER-MINUTE quota, per model. When Google
+ * answers 429 (quota / rate), that (key, model) pair is exhausted until
+ * its quota window resets — retrying it inside the same window only earns
+ * another 429 and another "Google is busy" flash. So a rate-limited pair
+ * is recorded here as COOLING until its reset moment (Google's own
+ * RetryInfo delay when it gives one, else 60s for a 429 / 30s for a 503),
+ * and rotation SKIPS cooling pairs entirely, moving straight to a pair
+ * that can actually answer. The map lives in memory and is mirrored to
+ * sessionStorage, so a page switch inside the same tab keeps cooldowns.
+ */
+const COOLDOWN_STORE = 'sc_cooldowns_v1';
+const cooldowns = new Map(); // `${keyTag}|${model}` -> reset timestamp (ms)
+let cooldownsLoaded = false;
+
+function loadCooldowns() {
+  if (cooldownsLoaded) return;
+  cooldownsLoaded = true;
+  try {
+    const raw = JSON.parse(sessionStorage.getItem(COOLDOWN_STORE) || '{}');
+    const now = Date.now();
+    for (const [k, v] of Object.entries(raw)) if (Number(v) > now) cooldowns.set(k, Number(v));
+  } catch { /* storage is best-effort */ }
+}
+function persistCooldowns() {
+  try {
+    const now = Date.now();
+    const out = {};
+    for (const [k, v] of cooldowns) if (v > now) out[k] = v;
+    sessionStorage.setItem(COOLDOWN_STORE, JSON.stringify(out));
+  } catch { /* storage is best-effort */ }
+}
+const pairId = (key, model) => `${keyTag(key)}|${model}`;
+
+/** Record a (key, model) pair as cooling for durationMs from now. */
+export function markCooldown(key, model, durationMs) {
+  loadCooldowns();
+  const ms = Math.max(0, Number(durationMs) || 0);
+  if (!ms) return;
+  cooldowns.set(pairId(key, model), Date.now() + ms);
+  persistCooldowns();
+}
+/** Is this (key, model) pair still resting after a rate-limit hit? */
+export function isCooling(key, model) {
+  loadCooldowns();
+  const until = cooldowns.get(pairId(key, model));
+  return !!until && until > Date.now();
+}
+/** Ms until this pair can answer again (0 when it can). */
+function cooldownLeft(key, model) {
+  loadCooldowns();
+  const until = cooldowns.get(pairId(key, model));
+  return until ? Math.max(0, until - Date.now()) : 0;
+}
+/** Drop every recorded cooldown. */
+export function clearCooldowns() {
+  loadCooldowns();
+  cooldowns.clear();
+  persistCooldowns();
+}
 /**
- * Run one Gemini request across model × key rotation with rate-limit
- * absorption. extract(d) returns the useful value from a response, or a
- * falsy value for a soft failure (HTTP 200 but nothing usable).
+ * Per-key rest status for the Settings list, parallel to getKeys():
+ * { until } is the moment the key's FIRST resting model can answer again,
+ * or null when no model on that key is resting.
+ */
+export function getKeyRestInfo() {
+  loadCooldowns();
+  const now = Date.now();
+  return getKeys().map((key) => {
+    const tag = keyTag(key) + '|';
+    let until = null;
+    for (const [id, v] of cooldowns) {
+      if (id.startsWith(tag) && v > now && (until === null || v < until)) until = v;
+    }
+    return { until };
+  });
+}
+
+/** A quota / rate-limit failure, however Google phrases it. */
+const isQuotaError = (e) => !!e && (e.status === 429 || e.body?.error?.status === 'RESOURCE_EXHAUSTED' || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(e.message || ''));
+/** How long a rate-limited pair rests: Google's own delay when given. */
+function cooldownMsFor(e) {
+  const g = googleRetryMs(e, 120000);
+  if (g > 0) return g;
+  return e && e.status === 503 ? 30000 : 60000;
+}
+
+const LIMIT_MESSAGE = 'Your free Gemini limit is used up for now. Wait a little, or add another key in Settings.';
+const REST_CAP_MS = 65000;
+/**
+ * When EVERY pair in `pairs` is cooling, wait ONCE for the earliest reset
+ * and say so once — "All free limits are resting — continuing in Ns…" —
+ * instead of flashing "busy" over and over. Returns the ms waited (>= 0),
+ * or -1 when the earliest reset is beyond the honest cap (the caller then
+ * throws the limit error rather than parking the user).
+ */
+async function restForEarliestReset(pairs, onRetry, info = {}) {
+  let earliest = Infinity;
+  for (const [model, key] of pairs) {
+    const left = cooldownLeft(key, model);
+    if (left > 0 && left < earliest) earliest = left;
+  }
+  if (!Number.isFinite(earliest)) return 0;
+  if (earliest > REST_CAP_MS) return -1;
+  if (onRetry) {
+    const waitSec = Math.max(1, Math.ceil(earliest / 1000));
+    try { onRetry({ attempt: 1, total: 1, ...info, waitMs: earliest, resting: true, waitSec, message: `All free limits are resting — continuing in ${waitSec}s…` }); } catch { /* UI only */ } }
+  await sleep(earliest);
+  return earliest;
+}
+
+/**
+ * Run one Gemini request across model × key rotation with quota-aware
+ * rate-limit absorption. extract(d) returns the useful value from a
+ * response, or a falsy value for a soft failure (HTTP 200 but nothing
+ * usable).
  *
- * Strategy: rotate through every model/key first — a 429/503 on one combo
- * moves straight to the next. Only when a whole round was rate-limited do
- * we wait (Google's own retryDelay when it gives one, capped at 30s,
- * otherwise ~4s, then ~12s, then ~30s) and retry just the rate-limited
- * combos, up to 3 waits. The "free limit" error is thrown only after all
- * of that is exhausted.
+ * Strategy: rotate through every model × key pair — but pairs that are
+ * COOLING after a 429 (see the cooldown map above) are skipped entirely:
+ * retrying an exhausted pair inside its quota window only earns another
+ * 429. A pair that answers 429/503 is marked cooling on the spot and the
+ * rotation moves straight to the next pair. Pairs that fail any other way
+ * (soft failure, hard error, retired model) are not retried in this call.
  *
- * Two hard ceilings keep the wait honest: every attempt is aborted after
+ * If EVERY pair ends up cooling, the call waits ONCE for the earliest
+ * quota reset — showing a single "All free limits are resting —
+ * continuing in Ns…" progress line via opts.onRetry — and then tries the
+ * freed pairs. If that earliest reset is more than ~65s away, the honest
+ * limit error is thrown instead of parking the user. That single resting
+ * wait is the only visible wait notice left: with cooldowns doing the
+ * work, the old repeated "Google is busy — retrying" rounds are gone.
+ *
+ * Two hard ceilings keep the call honest: every attempt is aborted after
  * ~25s (a stalled request moves on instead of hanging), and the whole
- * call — rotation plus retries — gives up after ~75s. While a backoff
- * wait runs, opts.onRetry({ attempt, total, waitMs }) fires so the UI can
- * say "Google is busy — retrying…" instead of spinning in silence — but
- * only from the second backoff round onward: round one is a silent quick
- * retry, so a single momentary 429 never shows the notice.
+ * call gives up after ~75s of attempts (the one resting wait, when it
+ * happens, does not eat into that attempt budget).
  */
 async function callWithRotation({ models, keys, timeoutMs = ATTEMPT_TIMEOUT_MS, makeBody, extract, failPrefix, emptyMessage, stopOnInvalidKey = true, onRetry = null }) {
-  const deadline = Date.now() + TOTAL_BUDGET_MS;
+  let deadline = Date.now() + TOTAL_BUDGET_MS;
   let last = null, rateError = null, retiredError = null;
-  let pending = [];
-  for (const model of models) for (const key of keys) pending.push([model, key]);
-  for (let round = 0; round <= BACKOFF_MS.length && pending.length; round++) {
-    if (round > 0) {
-      const wait = Math.min(Math.max(BACKOFF_MS[round - 1], googleRetryMs(rateError)), deadline - Date.now());
-      if (wait <= 0) break;
-      // The first backoff round stays silent: a single momentary 429 has
-      // already been absorbed by rotating through every model/key once, and
-      // one quiet wait follows. The visible "Google is busy — retrying"
-      // progress starts only at the SECOND backoff round — when Google is
-      // genuinely saturated, not on one momentary limit hit.
-      if (onRetry && round >= 2) { try { onRetry({ attempt: round, total: BACKOFF_MS.length, waitMs: wait }); } catch { /* UI only */ } }
-      await sleep(wait);
+  const combos = [];
+  for (const model of models) for (const key of keys) combos.push([model, key]);
+  const tried = new Set(); // pairIds attempted in this call that failed without rate-limiting
+  let rested = false;      // the single all-cooling wait may happen once per call
+  while (combos.length) {
+    const pending = combos.filter(([model, key]) => !tried.has(pairId(key, model)) && !isCooling(key, model));
+    if (!pending.length) {
+      // Nothing attemptable: either everything left is cooling (one honest
+      // wait for the earliest reset), or everything was already tried.
+      const resting = combos.filter(([model, key]) => !tried.has(pairId(key, model)) && isCooling(key, model));
+      if (resting.length && !rested) {
+        rested = true;
+        const waited = await restForEarliestReset(resting, onRetry);
+        if (waited < 0) throw new Error(LIMIT_MESSAGE);
+        deadline += waited; // the wait is not part of the attempt budget
+        continue;
+      }
+      break;
     }
-    const retry = [];
     for (const [model, key] of pending) {
       const remaining = deadline - Date.now();
       if (remaining <= 0) break;
@@ -233,27 +352,42 @@ async function callWithRotation({ models, keys, timeoutMs = ATTEMPT_TIMEOUT_MS, 
         const value = extract(d);
         if (value) return value;
         // Soft failure: keep rotating, but don't retry this combo later.
+        tried.add(pairId(key, model));
       } catch (e) {
         if (stopOnInvalidKey && e.status === 400 && /API key not valid/i.test(e.message)) {
           throw new Error('Google did not accept your Gemini key. Check it in Settings.');
         }
         if (isRetiredModel(e)) {
-          // Dead model name: skip it for the rest of this call (it is not
-          // added to the backoff retry list) and drop the cached model
-          // list so the next call re-resolves what the key can really use.
+          // Dead model name: skip it for the rest of this call and drop
+          // the cached model list so the next call re-resolves what the
+          // key can really use.
           retiredError = e;
           invalidateModelCache(key);
+          tried.add(pairId(key, model));
           continue;
         }
         last = e;
-        if (isRateLimit(e)) { retry.push([model, key]); rateError = e; }
+        if (isRateLimit(e) || isQuotaError(e)) {
+          // Mark the pair cooling and move on — it is NOT retried inside
+          // its quota window. Other models/keys take over immediately,
+          // and if none are left the loop above takes the one resting
+          // wait for the earliest reset.
+          markCooldown(key, model, cooldownMsFor(e));
+          rateError = e;
+        } else {
+          tried.add(pairId(key, model));
+        }
       }
     }
-    pending = retry;
-    if (Date.now() >= deadline) break;
+    // Loop again only when something may have become attemptable: pairs
+    // still cooling (handled at the top via the resting wait). Anything
+    // else means every pair was tried or is cooling after a rest — stop.
+    const coolingLeft = combos.some(([model, key]) => !tried.has(pairId(key, model)) && isCooling(key, model));
+    if (!coolingLeft) break;
+    if (rested && Date.now() >= deadline) break;
   }
   if (last) {
-    if (isRateLimit(last)) throw new Error('Your free Gemini limit is used up for now. Wait a little, or add another key in Settings.');
+    if (isRateLimit(last) || isQuotaError(last)) throw new Error(LIMIT_MESSAGE);
     if (last.name === 'AbortError') throw new Error('Google took too long to answer. Check your connection and try again.');
     throw new Error(`${failPrefix}: ${last.message}`);
   }
@@ -349,6 +483,10 @@ function noImageReason(d) {
  * model from the key's resolved list is tried in turn, each with its own
  * attempt budget: one pass over the keys at a 60s per-attempt timeout,
  * plus one retry pass when Google rate-limited (429/503) the first pass.
+ * The quota cooldown map applies here too: a pair that answers 429 is
+ * marked cooling and skipped (never retried inside its quota window),
+ * and if every pair for a model is resting, the call takes the single
+ * all-cooling wait for the earliest reset before retrying.
  * Retired model names are skipped for the rest of the call and the cached
  * model list is dropped, exactly as in callWithRotation.
  */
@@ -363,16 +501,23 @@ export async function geminiImage(prompt, imagePart = null, aspectRatio = null, 
   const models = [...await modelsFor(keys, 'image')];
   for (const f of FALLBACK_MODELS.image) if (!models.includes(f)) models.push(f);
   const failures = [];
+  let rested = false; // the whole call takes at most ONE all-cooling wait
   for (const model of models) {
-    let lastErr = null, soft = null, rateLimited = false;
+    let lastErr = null, soft = null;
+    const pairs = keys.map(k => [model, k]);
     for (let pass = 0; pass < 2; pass++) {
-      if (pass > 0) {
-        const wait = Math.min(15000, Math.max(4000, googleRetryMs(lastErr)));
-        if (onRetry) { try { onRetry({ attempt: pass, total: 1, waitMs: wait }); } catch { /* UI only */ } }
-        await sleep(wait);
+      if (!pairs.some(([m, k]) => !isCooling(k, m))) {
+        // Every key for this model is resting after a 429: wait ONCE for
+        // the earliest reset (shared across the whole call), then retry
+        // the freed pairs. Beyond the cap, record and move on.
+        if (rested) break;
+        rested = true;
+        const waited = await restForEarliestReset(pairs, onRetry);
+        if (waited < 0) { lastErr = lastErr || Object.assign(new Error('rate limited'), { status: 429 }); break; }
       }
-      rateLimited = false;
+      let rateLimited = false;
       for (const key of keys) {
+        if (isCooling(key, model)) continue; // resting pair — skip entirely
         try {
           const d = await callOnce(model, key, body, 60000);
           const img = (d?.candidates?.[0]?.content?.parts || []).find(p => p.inlineData?.data);
@@ -384,7 +529,7 @@ export async function geminiImage(prompt, imagePart = null, aspectRatio = null, 
           }
           lastErr = e;
           if (isRetiredModel(e)) { invalidateModelCache(key); break; }
-          if (isRateLimit(e)) { rateLimited = true; continue; }
+          if (isRateLimit(e) || isQuotaError(e)) { markCooldown(key, model, cooldownMsFor(e)); rateLimited = true; continue; }
           break; // hard error for this model — recorded below; move to the next model
         }
       }
