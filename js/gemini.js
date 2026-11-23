@@ -74,16 +74,38 @@ export async function geminiJson(prompt, opts = {}) {
   try { return JSON.parse(s.slice(start, end + 1)); } catch { throw new Error('The AI reply could not be read. Try again.'); }
 }
 
-/** Validate a key with one tiny call. Returns true/false, throws with message. */
-export async function testKey(key) {
+/**
+ * Check a key WITHOUT blocking on the result. The key belongs to the visitor
+ * and is always saved by the caller first; this only reports its status:
+ * 'verified' (Google accepted it), 'rejected' (Google said the key itself is
+ * not valid), or 'unchecked' (Google could not be reached / no clear answer).
+ */
+export async function checkKey(key) {
+  // Lightest check first: list models (no generation quota used).
+  try {
+    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models', { headers: { 'x-goog-api-key': key } });
+    if (r.ok) return { state: 'verified' };
+    const d = await r.json().catch(() => ({}));
+    const msg = d?.error?.message || '';
+    if ((r.status === 400 || r.status === 403) && /API key not valid|API_KEY_INVALID/i.test(msg)) return { state: 'rejected', message: msg };
+  } catch { /* network failure — fall through to the generation check */ }
   for (const model of MODELS) {
     try {
       const d = await callOnce(model, key, { contents: [{ role: 'user', parts: [{ text: 'Reply with the single word: ok' }] }] }, 20000);
       const text = (d?.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
-      if (/ok/i.test(text)) return true;
-    } catch (e) { if (e.status === 400 || e.status === 403) throw new Error('Google did not accept this key. Make sure you copied the full key.'); }
+      if (/ok/i.test(text)) return { state: 'verified' };
+    } catch (e) {
+      if ((e.status === 400 || e.status === 403) && /API key not valid|API_KEY_INVALID/i.test(e.message)) return { state: 'rejected', message: e.message };
+    }
   }
-  throw new Error('The key could not be checked. Try again in a moment.');
+  return { state: 'unchecked' };
+}
+
+/** Backwards-compatible wrapper: true when Google verified the key. */
+export async function testKey(key) {
+  const r = await checkKey(key);
+  if (r.state === 'rejected') throw new Error('Google did not accept this key. Make sure you copied the full key.');
+  return r.state === 'verified';
 }
 
 /** Image generation attempt (Gemini image model). Returns a data URL or throws. */

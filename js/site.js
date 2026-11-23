@@ -1,5 +1,5 @@
 // StreamClip AI — shared helpers (toast) + Settings page logic.
-import { getKeys, addKey, removeKey, testKey, esc } from './gemini.js';
+import { getKeys, addKey, removeKey, checkKey, esc } from './gemini.js';
 
 export function toast(msg, bad = false) {
   let t = document.querySelector('.toast');
@@ -29,16 +29,16 @@ if (keyList) {
     if (k.length < 20) { toast('That does not look like a Gemini key. Copy the full key.', true); return; }
     if (getKeys().includes(k)) { toast('This key is already added.'); return; }
     const b = ev.currentTarget;
-    b.disabled = true; b.innerHTML = '<span class="spin"></span> Checking…';
-    try {
-      await testKey(k);
-      addKey(k);
-      input.value = '';
-      render();
-      toast('Key added. All AI tools are now unlocked.');
-    } catch (e) {
-      toast(e.message, true);
-    }
+    b.disabled = true; b.innerHTML = '<span class="spin"></span> Adding…';
+    // The visitor's own key is saved FIRST — adding a key never depends on
+    // our check. The check only reports the key's status afterwards.
+    addKey(k);
+    input.value = '';
+    render();
+    const r = await checkKey(k);
+    if (r.state === 'verified') toast('Key added and verified with Google. All AI tools are now unlocked.');
+    else if (r.state === 'rejected') toast('Key added, but Google says this key is not valid. Check you copied the full key, or create a fresh one and add that instead.', true);
+    else toast('Key added. Google could not be reached to verify it just now — the tools will use it as-is.');
     b.disabled = false; b.innerHTML = 'Check and add';
   });
 }
