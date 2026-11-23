@@ -403,3 +403,14 @@ img.prev { max-width: 100%; border-radius: 14px; display: block; }
 .ratiopop { margin-top: 12px; padding: 13px; border-radius: 16px; background: rgba(255, 255, 255, .04); border: 1px solid var(--line); }
 .moment .pickbtn.on { color: #05260f; background: linear-gradient(180deg, #6ff0ad, var(--green)); box-shadow: 0 1px 0 #c8ffe1 inset, 0 4px 0 var(--gedge); }
 audio { max-width: 100%; }
+
+/* ---------- home: app-look hero card + sections ---------- */
+.app-hero { margin-top: 22px; }
+.app-hero h1 { font-size: 31px; line-height: 1.18; max-width: 580px; }
+.app-hero h1 em { font-style: normal; background: var(--ydark); color: var(--y1); padding: 0 10px; border-radius: 10px; }
+.app-hero > p { font-size: 15.5px; max-width: 640px; }
+.app-hero .paste .btn { flex: none; padding: 13px 16px; }
+.app-hero .paste .btn svg { width: 22px; height: 22px; }
+#catsearch { margin-bottom: 12px; }
+#shortsgrid:empty { display: none; }
+@media (max-width: 440px) { .app-hero h1 { font-size: 26px; } }

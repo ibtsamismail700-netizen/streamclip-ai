@@ -15,11 +15,34 @@
 <a class="brand-name" href="index.html">Stream<i>Clip</i> AI</a>
 <nav class="mainnav"><a href="index.html">Home</a><a href="index.html#tools">Tools</a><a href="settings.html">Settings</a><a href="about.html">About</a><a href="contact.html">Contact</a></nav>
 </div></header>
-<div class="wrap"><section class="hero">
-<h1>Turn long videos into <em>shorts</em>, thumbnails & study notes</h1>
-<p class="sub mt">StreamClip AI is a free set of tools that runs in your browser. Paste a stream transcript, upload a video or a lecture — the AI finds the moments that matter, writes the hooks and captions, redesigns your thumbnails and turns lectures into revision clips, notes, flashcards and presentations.</p>
-<div class="btns two mt2"><a class="btn big" href="tools/stream-clipper.html">Start clipping</a><a class="btn dark big" href="settings.html">Add your Gemini key</a></div>
+<div class="wrap"><section class="card gold app-hero">
+<h1>Turn any live stream into <em>shorts</em></h1>
+<p class="mt">Paste a YouTube or Twitch link. StreamClip AI listens to the whole stream, finds the best moments and cuts them for you.</p>
+<div class="paste mt">
+<input class="input" id="herolink" placeholder="youtube.com/watch?v=... or twitch.tv/..." autocomplete="off" autocapitalize="off" spellcheck="false">
+<button class="btn dark" id="heropaste" aria-label="Paste link from clipboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.5V3h6v1.5"/></svg></button>
+</div>
+<button class="btn dark block big mt" id="herofind"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20.5 20.5L16.7 16.7"/></svg> Find the best moments</button>
 </section>
+<div class="sec-title"><h2>Live now</h2><span class="small dim">Pick a category</span></div>
+<input class="input hidden" id="catsearch" placeholder="Search any game or name…" autocomplete="off" autocapitalize="off" spellcheck="false">
+<div class="cats" id="catgrid">
+<button class="cat hot" data-cat="GTA 6" data-sub="Grand Theft Auto VI"><b>GTA 6</b><span>Grand Theft Auto VI</span></button>
+<button class="cat" data-cat="GTA 5 RP" data-sub="Roleplay"><b>GTA 5 RP</b><span>Roleplay</span></button>
+<button class="cat" data-cat="Fortnite" data-sub="Battle royale"><b>Fortnite</b><span>Battle royale</span></button>
+<button class="cat" data-cat="Minecraft" data-sub="Build and survive"><b>Minecraft</b><span>Build and survive</span></button>
+<button class="cat" data-cat="Free Fire" data-sub="Mobile"><b>Free Fire</b><span>Mobile</span></button>
+<button class="cat" data-cat="BGMI / PUBG" data-sub="Mobile"><b>BGMI / PUBG</b><span>Mobile</span></button>
+<button class="cat" data-cat="Valorant" data-sub="Shooter"><b>Valorant</b><span>Shooter</span></button>
+<button class="cat" data-cat="Call of Duty" data-sub="Warzone"><b>Call of Duty</b><span>Warzone</span></button>
+<button class="cat" data-cat="Roblox" data-sub="Games"><b>Roblox</b><span>Games</span></button>
+<button class="cat" data-cat="Just Chatting" data-sub="Talk and react"><b>Just Chatting</b><span>Talk and react</span></button>
+<button class="cat" data-cat="IRL" data-sub="Out and about"><b>IRL</b><span>Out and about</span></button>
+<button class="cat" id="catsearchcard"><b>Search</b><span>Any game or name</span></button>
+</div>
+<div class="sec-title"><h2>Your shorts</h2><span class="small dim" id="shortscount"></span></div>
+<div class="grid" id="shortsgrid"></div>
+<div class="card empty" id="shortsempty"><h3>No shorts yet</h3><p class="sub">Your finished shorts will appear here. Make your first one with the Stream Clipper or Upload Your Own Video.</p></div>
 <div class="note mt2"><div><b>How is it free?</b><div class="small dim">Every AI tool here runs on <b>your own free Gemini key</b> from Google AI Studio. You add it once in Settings; it stays in your browser and goes only to Google. The site has no key of its own and no AI bill — that is what keeps every tool free for everyone.</div></div></div>
 <div class="sec-title" id="tools"><h2>All tools</h2><span class="small dim">10 free tools</span></div>
 <div class="toolgrid"><a class="toolcard" href="tools/stream-clipper.html"><span class="ic">✂</span><h3>Stream Clipper</h3><p>Turn a live stream into viral Shorts — Gemini watches the YouTube video itself, or scans a Twitch transcript, and scores the best moments.</p><span class="go">Open tool →</span></a><a class="toolcard" href="tools/thumbnail-creator.html"><span class="ic">▦</span><h3>Thumbnail Creator / Redesigner</h3><p>Analyse any thumbnail and generate fresh, different-looking versions with the same text.</p><span class="go">Open tool →</span></a><a class="toolcard" href="tools/upload-video.html"><span class="ic">⬆</span><h3>Upload Your Own Video</h3><p>Upload a video, trim the best part in your browser and export it as a clip.</p><span class="go">Open tool →</span></a><a class="toolcard" href="tools/caption-translation.html"><span class="ic">文</span><h3>Caption Translation</h3><p>Translate captions into Urdu, Hindi, English and 100+ languages, timing kept intact.</p><span class="go">Open tool →</span></a><a class="toolcard" href="tools/hooks-title-generator.html"><span class="ic">⚡</span><h3>Hooks + Title Generator</h3><p>Viral hooks, titles and hashtags for any topic in seconds.</p><span class="go">Open tool →</span></a><a class="toolcard" href="tools/your-branding.html"><span class="ic">◆</span><h3>Your Own Branding</h3><p>Put your own logo and name on your videos — your brand, on every clip.</p><span class="go">Open tool →</span></a><a class="toolcard" href="tools/lecture-clips.html"><span class="ic">🎓</span><h3>Lecture to Revision Clips</h3><p>Long lectures become short revision clips of the key concepts.</p><span class="go">Open tool →</span></a><a class="toolcard" href="tools/lecture-notes.html"><span class="ic">✎</span><h3>Lecture to Notes</h3><p>Clean, downloadable study notes from a lecture transcript.</p><span class="go">Open tool →</span></a><a class="toolcard" href="tools/flashcards-quiz.html"><span class="ic">?</span><h3>Flashcards + Quiz</h3><p>Flashcards and an MCQ quiz made from your study text.</p><span class="go">Open tool →</span></a><a class="toolcard" href="tools/presentation-maker.html"><span class="ic">▶</span><h3>Video Presentation Maker</h3><p>A full slide plan plus the exact voice script for your class presentation — with AI voice playback in 30 Gemini voices.</p><span class="go">Open tool →</span></a></div>
@@ -43,4 +66,5 @@
 <p class="small dim">© 2026 StreamClip AI</p>
 </div></footer>
 <script type="module" src="js/site.js"></script>
+<script type="module" src="js/home.js"></script>
 </body></html>

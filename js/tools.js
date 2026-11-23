@@ -33,6 +33,27 @@ function wrapText(x, text, a, b, maxW, lh, maxLines = 4) {
   return y;
 }
 function copyText(t, msg = 'Copied.') { navigator.clipboard.writeText(t).then(() => toast(msg)).catch(() => toast('Copy failed — select the text manually.', true)); }
+// Finished clips are remembered (title + a small poster frame) so the home
+// page's "Your shorts" grid can show them. Video files themselves are NOT
+// stored — they are downloaded at export time and are far too big for
+// localStorage.
+const SHORTS_LS = 'sc_shorts_v1';
+function saveShort(title, videoEl) {
+  try {
+    let thumb = '';
+    if (videoEl && videoEl.videoWidth) {
+      const cv = document.createElement('canvas'); cv.width = 270; cv.height = 480;
+      const x = cv.getContext('2d');
+      const sc = Math.max(270 / videoEl.videoWidth, 480 / videoEl.videoHeight);
+      x.fillStyle = '#000'; x.fillRect(0, 0, 270, 480);
+      x.drawImage(videoEl, (270 - videoEl.videoWidth * sc) / 2, (480 - videoEl.videoHeight * sc) / 2, videoEl.videoWidth * sc, videoEl.videoHeight * sc);
+      thumb = cv.toDataURL('image/jpeg', 0.72);
+    }
+    const arr = JSON.parse(localStorage.getItem(SHORTS_LS) || '[]');
+    arr.unshift({ title: title || 'Untitled short', thumb, when: Date.now() });
+    localStorage.setItem(SHORTS_LS, JSON.stringify(arr.slice(0, 12)));
+  } catch {}
+}
 function chunkText(text, size = 5000) {
   const blocks = text.split(/\n\s*\n/); const chunks = []; let cur = '';
   for (const b of blocks) { if ((cur + '\n\n' + b).length > size && cur) { chunks.push(cur); cur = b; } else cur = cur ? cur + '\n\n' + b : b; }
@@ -415,6 +436,7 @@ if (tool === 'upload' || tool === 'lecture-clips') {
       if (b._stopDraw) b._stopDraw();
       const name = ($('ctitle')?.value.trim() || 'streamclip-clip').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'streamclip-clip';
       download(`${name}.webm`, new Blob(chunks, { type: 'video/webm' }));
+      saveShort(($('ctitle')?.value.trim() || name), v);
       toast(vertical ? 'Vertical 9:16 clip exported as WebM.' : 'Clip exported as WebM.');
     } catch (err) { toast('Export failed: ' + err.message, true); }
     busy(b, false, 'Export clip (WebM)');
@@ -474,6 +496,26 @@ if (tool === 'upload' || tool === 'lecture-clips') {
 
 /* ---------- Stream Clipper ---------- */
 if (tool === 'clipper') {
+  // Home-page handoff: a link and/or category picked on the home page arrives
+  // as a query param and/or a one-shot localStorage note — land both here.
+  try {
+    const qs = new URLSearchParams(location.search);
+    let ho = {};
+    try { ho = JSON.parse(localStorage.getItem('sc_handoff_v1') || '{}'); } catch {}
+    const hLink = qs.get('link') || ho.link || '';
+    const hCat = qs.get('cat') || ho.cat || '';
+    localStorage.removeItem('sc_handoff_v1');
+    if (hLink) { $('slink').value = hLink; toast('Link carried over from the home page — tap Find best moments.'); }
+    if (hCat) {
+      const niche = (hCat === 'Just Chatting' || hCat === 'IRL') ? 'Just chatting / IRL' : 'Gaming';
+      $('cniche').value = niche;
+      const note = $('cathandoff');
+      if (note) {
+        note.classList.remove('hidden');
+        note.innerHTML = `<div><b>Category picked on the home page: ${esc(hCat)}</b><div class="small dim">Stream type set to ${esc(niche)}. Paste the stream link above and tap Find best moments.</div></div>`;
+      }
+    }
+  } catch {}
   const setMode = (m) => {
     $('mode-yt').classList.toggle('on', m === 'yt');
     $('mode-tx').classList.toggle('on', m === 'tx');
@@ -686,6 +728,7 @@ if (tool === 'branding') {
       clearInterval(tick); cancelAnimationFrame(raf);
       rec.stop(); await done;
       download('branded-video.webm', new Blob(chunks, { type: 'video/webm' }));
+      saveShort(($('bname').value.trim() || 'Branded clip'), v);
       if (prog) prog.textContent = 'Done — branded video downloaded. Your logo and name are burned into every frame.';
       toast('Branded video exported.');
     } catch (err) { toast('Export failed: ' + err.message, true); if (prog) prog.textContent = ''; }
