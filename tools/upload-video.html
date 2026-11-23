@@ -26,11 +26,17 @@
 <p class="small dim mt" id="dur"></p>
 <label class="slider"><div class="spread"><span>Start</span><b id="inv">00:00</b></div><input type="range" id="in" min="0" max="10" step="1" value="0"></label>
 <label class="slider"><div class="spread"><span>End</span><b id="outv">00:00</b></div><input type="range" id="out" min="0" max="10" step="1" value="10"></label>
+<div class="btns two">
+<label class="field"><span>Output shape</span><select class="input" id="fmt"><option value="orig">Original size</option><option value="vertical">Vertical 9:16 (Shorts/TikTok)</option></select><span class="small dim">Vertical centre-crops the picture to 1080×1920 — best for Shorts.</span></label>
+<label class="field"><span>Clip file name</span><input class="input" id="ctitle" placeholder="e.g. boss-fight-final"><span class="small dim">Your download is saved with this name.</span></label>
+</div>
 <div class="btns two mt"><button class="btn dark" id="playseg">Play this part</button><button class="btn" id="export">Export clip (WebM)</button></div>
 <p class="small dim mt">Export records the chosen part in your browser in real time and downloads it as a WebM file (plays everywhere, uploads fine to Shorts/TikTok). A server MP4 render engine is not part of this website.</p>
 </div></div>
 <div class="card"><h3>AI: find the best moments in this video</h3>
-<p class="sub">Paste the video's transcript and the AI picks the moments worth clipping.</p>
+<p class="sub">Two ways: let Gemini <b>watch the video itself</b> (small files), or paste its transcript.</p>
+<button class="btn dark block mt" id="watch">Watch &amp; find moments</button>
+<p class="small dim mt">Watching sends the file from your browser to Google with your key — so it works for files up to about 18 MB. Bigger file? Use the transcript below — same AI, same ranking.</p>
 <label class="field"><span>Video transcript</span><textarea class="input" id="transcript" placeholder="Paste the transcript here…"></textarea></label>
 <button class="btn dark block mt" id="plan">Find best moments</button>
 <div id="planresult"></div></div>

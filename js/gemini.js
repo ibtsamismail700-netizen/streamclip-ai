@@ -109,7 +109,7 @@ export async function testKey(key) {
 }
 
 /** Image generation attempt (Gemini image model). Returns a data URL or throws. */
-export async function geminiImage(prompt, imagePart = null) {
+export async function geminiImage(prompt, imagePart = null, aspectRatio = null) {
   const keys = getKeys();
   if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
   const parts = [{ text: prompt }];
@@ -117,12 +117,114 @@ export async function geminiImage(prompt, imagePart = null) {
   let last;
   for (const key of keys) {
     try {
-      const d = await callOnce('gemini-2.5-flash-image', key, { contents: [{ role: 'user', parts }], generationConfig: { responseModalities: ['IMAGE'] } }, 90000);
+      const gc = { responseModalities: ['IMAGE'] };
+      if (aspectRatio) gc.imageConfig = { aspectRatio };
+      const d = await callOnce('gemini-2.5-flash-image', key, { contents: [{ role: 'user', parts }], generationConfig: gc }, 120000);
       const img = (d?.candidates?.[0]?.content?.parts || []).find(p => p.inlineData?.data);
       if (img) return `data:${img.inlineData.mimeType || 'image/png'};base64,${img.inlineData.data}`;
     } catch (e) { last = e; }
   }
   throw new Error(last ? `Image model: ${last.message}` : 'The image model did not answer.');
+}
+
+/** Gemini's built-in voices for text-to-speech (prebuilt voice names). */
+export const GEMINI_VOICES = ['Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir', 'Leda', 'Orus', 'Aoede', 'Callirrhoe', 'Autonoe', 'Enceladus', 'Iapetus', 'Umbriel', 'Algieba', 'Despina', 'Erinome', 'Algenib', 'Rasalgethi', 'Laomedeia', 'Alnilam', 'Schedar', 'Gacrux', 'Pulcherrima', 'Achird', 'Zubenelgenubi', 'Vindemiatrix', 'Sadachbia', 'Sadaltager', 'Sulafat'];
+
+/**
+ * General call with arbitrary content parts (text, inlineData, fileData…)
+ * and key + model rotation. Returns the model's text.
+ */
+export async function geminiParts(parts, { json = false, temperature = 0.5, models = MODELS, timeoutMs = 120000 } = {}) {
+  const keys = getKeys();
+  if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
+  let last;
+  for (const model of models) {
+    for (const key of keys) {
+      try {
+        const body = { contents: [{ role: 'user', parts }], generationConfig: { temperature } };
+        if (json) body.generationConfig.responseMimeType = 'application/json';
+        const d = await callOnce(model, key, body, timeoutMs);
+        const text = (d?.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
+        if (text) return text;
+      } catch (e) { last = e; if (e.status === 400 && /API key not valid/i.test(e.message)) throw new Error('Google did not accept your Gemini key. Check it in Settings.'); }
+    }
+  }
+  if (last?.status === 429) throw new Error('Your free Gemini limit is used up for now. Wait a little, or add another key in Settings.');
+  throw new Error(last ? `Gemini said: ${last.message}` : 'Gemini did not answer. Try again.');
+}
+
+/** JSON variant of geminiParts. */
+export async function geminiPartsJson(parts, opts = {}) {
+  const text = await geminiParts(parts, { ...opts, json: true });
+  let s = text.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  const a = s.indexOf('{'), b = s.indexOf('[');
+  const start = a < 0 ? b : b < 0 ? a : Math.min(a, b);
+  if (start < 0) throw new Error('The AI reply could not be read. Try again.');
+  const end = s.lastIndexOf(s[start] === '{' ? '}' : ']');
+  try { return JSON.parse(s.slice(start, end + 1)); } catch { throw new Error('The AI reply could not be read. Try again.'); }
+}
+
+/**
+ * Ask Gemini about a YouTube video directly from its URL (native video
+ * understanding). Optionally restrict attention to a time window in seconds
+ * via videoMetadata offsets. Returns parsed JSON.
+ */
+export async function geminiYouTubeJson(url, prompt, { startSec = null, endSec = null, timeoutMs = 240000 } = {}) {
+  const part = { fileData: { fileUri: url, mimeType: 'video/*' } };
+  if (startSec !== null || endSec !== null) {
+    part.videoMetadata = {};
+    if (startSec !== null) part.videoMetadata.startOffset = `${Math.max(0, Math.round(startSec))}s`;
+    if (endSec !== null) part.videoMetadata.endOffset = `${Math.max(1, Math.round(endSec))}s`;
+  }
+  return geminiPartsJson([part, { text: prompt }], { temperature: 0.4, timeoutMs });
+}
+
+/** List the models a key can use (for the Settings "what your key unlocks" panel). */
+export async function fetchModelList(key) {
+  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000', { headers: { 'x-goog-api-key': key } });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d?.error?.message || `HTTP ${r.status}`); }
+  const d = await r.json();
+  return d.models || [];
+}
+
+/**
+ * Gemini text-to-speech. Returns a playable WAV Blob.
+ * Gemini TTS answers with raw 16-bit PCM; we wrap it in a WAV header.
+ */
+export async function geminiTTS(text, voice = 'Kore') {
+  const keys = getKeys();
+  if (!keys.length) throw new Error('Add your Gemini key first (Settings).');
+  let last;
+  for (const key of keys) {
+    try {
+      const body = {
+        contents: [{ role: 'user', parts: [{ text: String(text).slice(0, 4000) }] }],
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+        },
+      };
+      const d = await callOnce('gemini-2.5-flash-preview-tts', key, body, 120000);
+      const part = (d?.candidates?.[0]?.content?.parts || []).find(p => p.inlineData?.data);
+      if (!part) throw new Error('The voice model returned no audio.');
+      const rate = Number(/rate=(\d+)/.exec(part.inlineData.mimeType || '')?.[1] || 24000);
+      return new Blob([pcmToWav(part.inlineData.data, rate)], { type: 'audio/wav' });
+    } catch (e) { last = e; }
+  }
+  throw new Error(last ? `Voice model: ${last.message}` : 'The voice model did not answer.');
+}
+
+function pcmToWav(b64, rate) {
+  const bin = atob(b64);
+  const pcm = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) pcm[i] = bin.charCodeAt(i);
+  const head = new DataView(new ArrayBuffer(44));
+  const wstr = (o, s) => { for (let i = 0; i < s.length; i++) head.setUint8(o + i, s.charCodeAt(i)); };
+  wstr(0, 'RIFF'); head.setUint32(4, 36 + pcm.length, true); wstr(8, 'WAVE'); wstr(12, 'fmt ');
+  head.setUint32(16, 16, true); head.setUint16(20, 1, true); head.setUint16(22, 1, true);
+  head.setUint32(24, rate, true); head.setUint32(28, rate * 2, true); head.setUint16(32, 2, true);
+  head.setUint16(34, 16, true); wstr(36, 'data'); head.setUint32(40, pcm.length, true);
+  return new Uint8Array([...new Uint8Array(head.buffer), ...pcm]);
 }
 
 export const fileToInline = (file) => new Promise((resolve, reject) => {

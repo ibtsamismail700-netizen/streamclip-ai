@@ -19,12 +19,20 @@
 <h1 class="mt">Hooks + Title Generator</h1>
 <p class="sub mt">Enter any topic and get scroll-stopping hooks, clickable titles and ready hashtags for Shorts, TikTok and Reels.</p>
 <div id="keyprompt" class="mt"></div>
-<div class="card"><h3>Generate</h3>
-<label class="field"><span>Your topic</span><input class="input" id="topic" placeholder="e.g. I beat the hardest boss with no armour"></label>
+<div class="card"><h3>Step 1 — Your topic</h3>
+<label class="field"><span>What is the video about?</span><input class="input" id="topic" placeholder="e.g. I beat the hardest boss with no armour"></label>
+<p class="small dim mt">Specific beats vague: "57 tries to beat the boss" gives far stronger hooks than "gaming video".</p>
+<h3 class="mt2">Step 2 — Style of the pack</h3>
 <div class="btns two">
-<label class="field"><span>Platform</span><select class="input" id="platform"><option>YouTube Shorts</option><option>TikTok</option><option>Instagram Reels</option></select></label>
-<label class="field"><span>Tone</span><select class="input" id="tone"><option>Exciting</option><option>Funny</option><option>Shocking</option><option>Calm & clear</option></select></label></div>
-<button class="btn block big mt" id="go">Generate hooks & titles</button></div>
+<label class="field"><span>Platform</span><select class="input" id="platform"><option>YouTube Shorts</option><option>TikTok</option><option>Instagram Reels</option><option>Facebook Reels</option></select><span class="small dim">Title length and hashtag style are tuned per platform.</span></label>
+<label class="field"><span>Tone</span><select class="input" id="tone"><option>Exciting</option><option>Funny</option><option>Shocking</option><option>Calm &amp; clear</option><option>Motivational</option></select><span class="small dim">The emotional flavour of every hook and title.</span></label>
+</div>
+<div class="btns two">
+<label class="field"><span>Hook style</span><select class="input" id="hstyle"><option>Curiosity gap ("Nobody talks about…")</option><option>Shock / reveal</option><option>Question to the viewer</option><option>Challenge / dare</option><option>Story opening</option><option>Mistake / myth-busting</option><option>Mixed — a bit of everything</option></select><span class="small dim">The pattern the first 2 seconds of your video will follow.</span></label>
+<label class="field"><span>Language</span><select class="input" id="hlang"><option>English</option><option>Urdu</option><option>Roman Urdu</option><option>Hindi</option><option>Roman Hindi</option></select><span class="small dim">Hooks and titles are written in this language.</span></label>
+</div>
+<label class="field"><span>How many hooks?</span><select class="input" id="hcount"><option>6</option><option selected>8</option><option>10</option><option>15</option></select><span class="small dim">More hooks = more choice. Titles and hashtags scale with it.</span></label>
+<button class="btn block big mt" id="go">Generate hooks &amp; titles</button></div>
 <div id="result"></div>
 <section class="guide"><h2>How this tool works</h2>
 <div class="steps-num"><div class="stp"><span class="n">1</span><div>Write your topic in one line — the more specific, the better the hooks.</div></div><div class="stp"><span class="n">2</span><div>Pick the platform and tone.</div></div><div class="stp"><span class="n">3</span><div>Tap generate: you get 8 hooks, 6 titles and 8 hashtags.</div></div><div class="stp"><span class="n">4</span><div>Copy the hashtags in one tap and use the hook as the text on your video.</div></div></div>

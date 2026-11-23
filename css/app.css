@@ -394,3 +394,12 @@ img.prev { max-width: 100%; border-radius: 14px; display: block; }
 .slidecard { border-left: 4px solid var(--y2); }
 .kv { display: grid; gap: 4px; }
 .mono { font-family: ui-monospace, Menlo, monospace; font-size: 13px; word-break: break-all; }
+
+/* ---------- Flow-style bottom bar (thumbnail creator) ---------- */
+.flowbar { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 10px 12px; border-radius: 16px;
+  background: #15120d; border: 1px solid rgba(255, 226, 150, .14); box-shadow: 0 2px 0 rgba(0, 0, 0, .45) inset; }
+.flowbar .grow { flex: 1; min-width: 0; }
+.flowbar .icon-btn { font-size: 22px; font-weight: 800; color: var(--y1); }
+.ratiopop { margin-top: 12px; padding: 13px; border-radius: 16px; background: rgba(255, 255, 255, .04); border: 1px solid var(--line); }
+.moment .pickbtn.on { color: #05260f; background: linear-gradient(180deg, #6ff0ad, var(--green)); box-shadow: 0 1px 0 #c8ffe1 inset, 0 4px 0 var(--gedge); }
+audio { max-width: 100%; }

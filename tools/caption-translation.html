@@ -19,11 +19,18 @@
 <h1 class="mt">Caption Translation</h1>
 <p class="sub mt">Translate captions or subtitle text into another language while keeping every line break and timestamp exactly in place.</p>
 <div id="keyprompt" class="mt"></div>
-<div class="card"><h3>Translate your captions</h3>
-<label class="field"><span>Target language</span><select class="input" id="lang">
-<option>Urdu</option><option>Hindi</option><option>English</option><option>Roman Urdu (Urdu in English letters)</option><option>Arabic</option><option>Spanish</option><option>Portuguese</option><option>Indonesian</option><option>Turkish</option><option>French</option><option>German</option><option>Bangla</option><option>Punjabi</option></select></label>
-<label class="field"><span>Your captions (paste SRT or plain lines)</span><textarea class="input" id="src" placeholder="00:01 Hello everyone&#10;00:04 Welcome back…"></textarea></label>
-<button class="btn block big mt" id="go">Translate captions</button></div>
+<div class="card"><h3>Step 1 — Languages &amp; style</h3>
+<div class="btns two">
+<label class="field"><span>From (source language)</span><select class="input" id="sfrom"><option>Auto-detect</option><option>English</option><option>Urdu</option><option>Hindi</option><option>Roman Urdu</option><option>Arabic</option><option>Spanish</option></select><span class="small dim">Auto-detect works well; naming it helps with mixed-language captions.</span></label>
+<label class="field"><span>To (target language)</span><select class="input" id="lang">
+<option>Urdu</option><option>Hindi</option><option>English</option><option>Roman Urdu (Urdu in English letters)</option><option>Arabic</option><option>Spanish</option><option>Portuguese</option><option>Indonesian</option><option>Turkish</option><option>French</option><option>German</option><option>Bangla</option><option>Punjabi</option><option>Pashto</option><option>Sindhi</option><option>Tamil</option><option>Telugu</option><option>Malay</option><option>Russian</option><option>Japanese</option><option>Korean</option><option>Chinese (Simplified)</option><option>Italian</option><option>Dutch</option></select><span class="small dim">Roman Urdu is best for Pakistani audiences who read English letters.</span></label>
+</div>
+<label class="field"><span>Translation style</span><select class="input" id="tstyle"><option>Natural spoken (recommended)</option><option>Formal / written</option><option>Word-for-word literal</option><option>Short &amp; punchy for Shorts</option></select><span class="small dim">Natural spoken sounds like a real person talking — best for videos.</span></label>
+<h3 class="mt2">Step 2 — Your captions</h3>
+<label class="field"><span>Paste SRT or plain lines</span><textarea class="input" id="src" placeholder="00:01 Hello everyone&#10;00:04 Welcome back…"></textarea></label>
+<p class="small dim mt">Long files are translated part by part automatically — timestamps and line breaks are kept exactly. Progress shows below.</p>
+<button class="btn block big mt" id="go">Translate captions</button>
+<p class="small dim mt" id="tstatus"></p></div>
 <div id="result"></div>
 <section class="guide"><h2>How this tool works</h2>
 <div class="steps-num"><div class="stp"><span class="n">1</span><div>Paste your captions — SRT format or one caption per line both work.</div></div><div class="stp"><span class="n">2</span><div>Choose the target language.</div></div><div class="stp"><span class="n">3</span><div>Tap "Translate captions". Only the spoken words are translated; timestamps and line breaks stay untouched.</div></div><div class="stp"><span class="n">4</span><div>Copy the result and paste it into your editor or upload it as a subtitle file.</div></div></div>

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#12100c">
-<meta name="description" content="Paste a stream transcript and let AI pick the viral moments — with scores, hooks and titles for each clip.">
+<meta name="description" content="Paste a YouTube stream link and Gemini watches it to find the viral moments — or scan a Twitch transcript — with scores, hooks and titles for each clip.">
 <title>Stream Clipper | StreamClip AI</title>
 <link rel="stylesheet" href="../css/app.css">
 </head>
@@ -17,20 +17,53 @@
 </div></header>
 <div class="wrap"><p class="small dim mt"><a href="../index.html">← All tools</a></p>
 <h1 class="mt">Stream Clipper</h1>
-<p class="sub mt">Paste a stream transcript and let AI pick the viral moments — with scores, hooks and titles for each clip.</p>
+<p class="sub mt">Paste a YouTube stream link and Gemini watches the video itself to pick the viral moments — or scan a Twitch transcript — with scores, hooks and titles for each clip.</p>
 <div id="keyprompt" class="mt"></div>
-<div class="note mt"><div><b>One honest note first.</b><div class="small dim">A website in a browser cannot download a video from YouTube or Twitch — that needed the phone app's built-in downloader, which is not part of this website. So here you work from the stream's <b>transcript</b> (on YouTube: open the video → "…" → "Open transcript" → copy). The AI reads it and picks the exact moments to clip, with timestamps, hooks and titles. To cut the video itself, use <a href="upload-video.html">Upload Your Own Video</a>.</div></div></div>
-<div class="card"><h3>1. Your stream link (for your reference)</h3>
-<label class="field"><span>YouTube or Twitch link</span><input class="input" id="slink" placeholder="youtube.com/watch?v=… or twitch.tv/…"></label>
-<h3 class="mt2">2. Paste the transcript</h3>
+<div class="tabs mt"><button class="tab on" id="mode-yt">YouTube link — AI watches it</button><button class="tab" id="mode-tx">Transcript — Twitch &amp; others</button></div>
+<div id="panel-yt">
+<div class="card"><h3>Step 1 — Paste the YouTube stream link</h3>
+<p class="small dim mt">Gemini watches the actual video from its link, on Google's side — no download and no transcript needed. Works on public videos; private or age-restricted ones can fail (use the Transcript tab then).</p>
+<label class="field"><span>YouTube link</span><input class="input" id="slink" placeholder="youtube.com/watch?v=… or youtu.be/…"></label>
+<h3 class="mt2">Step 2 — What should the AI hunt for?</h3>
+<div class="btns two">
+<label class="field"><span>Stream type</span><select class="input" id="cniche"><option>Gaming</option><option>Just chatting / IRL</option><option>Sports &amp; esports</option><option>Music / DJ</option><option>Podcast / talk</option><option>Study / lecture stream</option></select><span class="small dim">Tells the AI what a "big moment" looks like in this kind of stream.</span></label>
+<label class="field"><span>Clip style</span><select class="input" id="cstyle"><option>Balanced — best overall</option><option>Funniest moments</option><option>Hype &amp; clutch plays</option><option>Emotional / story moments</option><option>Fails &amp; surprises</option></select><span class="small dim">The flavour of moments to prefer when scoring.</span></label>
+</div>
+<div class="btns two">
+<label class="field"><span>How many clips to pre-pick</span><select class="input" id="ccount"><option>3</option><option selected>5</option><option>8</option><option>10</option></select><span class="small dim">The top moments are ticked for posting automatically — you can change the picks after.</span></label>
+<label class="slider"><div class="spread"><span>Minimum viral score</span><b id="cminv">70</b></div><input type="range" id="cmin" min="40" max="95" step="1" value="70"><span class="small dim">Only moments scoring at least this get pre-picked. 70 is a good start.</span></label>
+</div>
+<button class="btn block big mt" id="scan">Find best moments</button>
+<div class="steps hidden" id="scansteps">
+<div class="step" id="st1"><span class="dot">1</span><span>Asking Gemini about this video…</span></div>
+<div class="step" id="st2"><span class="dot">2</span><span>Watching in 10-minute windows and scoring moments</span></div>
+<div class="step" id="st3"><span class="dot">3</span><span>Ranking and pre-picking the best</span></div>
+</div></div>
+<div id="ytsummary"></div>
+<div id="ytmoments"></div>
+<div class="note mt"><div><b>Honest limits.</b><div class="small dim">Gemini watches the video on Google's side from the link — a browser website still cannot download YouTube/Twitch video files, and streams longer than 4 hours are watched in part. To cut the video file itself, use <a href="upload-video.html">Upload Your Own Video</a>.</div></div></div>
+</div>
+<div id="panel-tx" class="hidden">
+<div class="card"><h3>Step 1 — Your stream link (optional, for your notes)</h3>
+<label class="field"><span>Twitch or YouTube link</span><input class="input" id="txlink" placeholder="twitch.tv/…"></label>
+<h3 class="mt2">Step 2 — Paste the transcript</h3>
+<p class="small dim mt">Twitch: export the VOD's captions/transcript, or paste the chat log. YouTube: video page → "…" → "Open transcript" → copy. Timestamps in the text give exact cut points. Long transcripts are scored part by part, live.</p>
 <label class="field"><span>Stream transcript (with timestamps is best)</span><textarea class="input" id="transcript" placeholder="Paste the transcript here…"></textarea></label>
-<button class="btn block big mt" id="plan">Find best moments</button></div>
-<div id="planresult"></div>
+<h3 class="mt2">Step 3 — Pick strength</h3>
+<div class="btns two">
+<label class="field"><span>How many clips to pre-pick</span><select class="input" id="tcount"><option>3</option><option selected>5</option><option>8</option><option>10</option></select><span class="small dim">Top-scoring moments are ticked for posting automatically.</span></label>
+<label class="slider"><div class="spread"><span>Minimum viral score</span><b id="tminv">70</b></div><input type="range" id="tmin" min="40" max="95" step="1" value="70"><span class="small dim">Raise it for only the very strongest moments.</span></label>
+</div>
+<button class="btn block big mt" id="tscan">Find best moments</button>
+<p class="small dim mt" id="txstatus"></p></div>
+<div id="txsummary"></div>
+<div id="txmoments"></div>
+</div>
 <section class="guide"><h2>How this tool works</h2>
-<div class="steps-num"><div class="stp"><span class="n">1</span><div>Copy the transcript of the stream from YouTube (video page → "…" → "Open transcript").</div></div><div class="stp"><span class="n">2</span><div>Paste the stream link above for reference, then paste the transcript.</div></div><div class="stp"><span class="n">3</span><div>Tap "Find best moments" — the AI reads the whole transcript and scores each strong moment 0–99.</div></div><div class="stp"><span class="n">4</span><div>You get a ranked list: timestamp, catchy title, hook line and why the moment works.</div></div><div class="stp"><span class="n">5</span><div>Cut those timestamps from the stream video (or upload the recording in Upload Your Own Video) and post.</div></div></div>
-<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>The stream transcript (timestamps help the AI give exact cut points)</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A ranked list of the best moments with viral scores</li><li>A title and hook for every moment</li><li>Exact timestamps to cut</li></ul></div></div></div>
-<h2>Tips</h2><ul><li>Longer transcripts find better moments — a full stream beats a 10-minute piece.</li><li>Pick moments that make sense to someone who never watched the stream.</li><li>Post the strongest moment first while you cut the rest.</li></ul>
-<h2>FAQ</h2><div class="faq"><b>Why can the site not just take my link and cut the video?</b><p>Downloading from YouTube/Twitch needs a server-side downloader engine. A browser-only website cannot do it, so this tool works from the transcript and the Upload tool cuts the actual video file.</p></div><div class="faq"><b>What makes a moment score high?</b><p>Big reactions, clutch plays, fails, arguments, reveals and punchlines — moments that stand alone without context.</p></div></section></div>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>For YouTube: paste the stream link — Gemini watches the video itself on Google's side, in 10-minute windows. For Twitch or private videos: use the Transcript tab and paste the transcript.</div></div><div class="stp"><span class="n">2</span><div>Choose the stream type and clip style so the AI scores the right kind of moments.</div></div><div class="stp"><span class="n">3</span><div>Tap "Find best moments" — moments appear live as each part is watched/read, each scored 0–99 with a title, hook and reason.</div></div><div class="stp"><span class="n">4</span><div>The best moments (above your minimum score) are pre-picked for posting. Change any pick with one tap, then copy the picked list.</div></div><div class="stp"><span class="n">5</span><div>Cut those timestamps from the stream video (or upload the recording in Upload Your Own Video) and post.</div></div></div>
+<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>A public YouTube stream link — or a transcript for Twitch/private videos</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A ranked list of the best moments with viral scores</li><li>A title and hook for every moment</li><li>Exact timestamps to cut, best moments pre-picked</li></ul></div></div></div>
+<h2>Tips</h2><ul><li>Match the stream type honestly — a podcast scored like a gaming stream gives odd picks.</li><li>Pick moments that make sense to someone who never watched the stream.</li><li>Post the strongest moment first while you cut the rest.</li></ul>
+<h2>FAQ</h2><div class="faq"><b>Can the site download the video from my link and cut it?</b><p>No — downloading from YouTube/Twitch needs a server-side downloader engine, which a browser-only website cannot run. What changed: Gemini now watches the YouTube video itself from the link to find the moments. Cutting the file itself is done in Upload Your Own Video.</p></div><div class="faq"><b>What makes a moment score high?</b><p>Big reactions, clutch plays, fails, arguments, reveals and punchlines — moments that stand alone without context.</p></div></section></div>
 <footer class="site-foot"><div class="in">
 <div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
 <p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>

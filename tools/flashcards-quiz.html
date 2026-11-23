@@ -19,12 +19,18 @@
 <h1 class="mt">Flashcards + Quiz</h1>
 <p class="sub mt">Student Mode: paste any study text and get tap-to-flip flashcards plus a self-checking MCQ quiz, made from your material only.</p>
 <div id="keyprompt" class="mt"></div>
-<div class="card"><h3>Your study material</h3>
+<div class="card"><h3>Step 1 — Your study material</h3>
 <label class="field"><span>Paste your notes, chapter text or lecture transcript</span><textarea class="input" id="src" placeholder="Paste your study text here…"></textarea></label>
-<button class="btn block big mt" id="go">Make flashcards & quiz</button></div>
+<h3 class="mt2">Step 2 — Deck &amp; quiz size</h3>
+<div class="btns three">
+<label class="field"><span>Flashcards</span><select class="input" id="fccount"><option>6</option><option selected>8</option><option>12</option><option>16</option></select><span class="small dim">One card per key idea.</span></label>
+<label class="field"><span>Quiz questions</span><select class="input" id="fqcount"><option>5</option><option selected>6</option><option>10</option></select><span class="small dim">4 options each, scored live.</span></label>
+<label class="field"><span>Difficulty</span><select class="input" id="fdiff"><option>Easy — recall</option><option selected>Medium — understanding</option><option>Hard — exam style</option></select><span class="small dim">Hard mixes in traps like the real paper.</span></label>
+</div>
+<button class="btn block big mt" id="go">Make flashcards &amp; quiz</button></div>
 <div id="result"></div>
 <section class="guide"><h2>How this tool works</h2>
-<div class="steps-num"><div class="stp"><span class="n">1</span><div>Paste your study text — notes, a chapter, or a lecture transcript.</div></div><div class="stp"><span class="n">2</span><div>Tap the button: the AI builds 8 flashcards and a 6-question quiz from your text only.</div></div><div class="stp"><span class="n">3</span><div>Tap a flashcard to flip it; use Previous/Next to move through the deck.</div></div><div class="stp"><span class="n">4</span><div>Answer the quiz by tapping an option — right and wrong answers are marked instantly, with the reason.</div></div></div>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>Paste your study text — notes, a chapter, or a lecture transcript.</div></div><div class="stp"><span class="n">2</span><div>Choose your deck size, quiz size and difficulty, then tap the button: the AI builds them from your text only.</div></div><div class="stp"><span class="n">3</span><div>Tap a flashcard to flip it; use Previous/Next to move through the deck.</div></div><div class="stp"><span class="n">4</span><div>Answer the quiz by tapping an option — right and wrong answers are marked instantly, with the reason.</div></div></div>
 <div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>Your study text (at least a few paragraphs)</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A tap-to-flip flashcard deck</li><li>A 6-question MCQ quiz with instant checking and explanations</li></ul></div></div></div>
 <h2>Tips</h2><ul><li>Do the flashcards first, then the quiz — in that order.</li><li>Regenerate with a different chapter section for a fresh deck.</li><li>Say flashcard answers out loud before flipping; active recall beats reading.</li></ul>
 <h2>FAQ</h2><div class="faq"><b>Are the questions from my text or from general knowledge?</b><p>From your text only — the generator is instructed to stay exact to what you pasted.</p></div><div class="faq"><b>Can I save the deck?</b><p>Regenerating takes seconds with the same text, so most students just rebuild it. Your text is not stored on this site.</p></div></section></div>

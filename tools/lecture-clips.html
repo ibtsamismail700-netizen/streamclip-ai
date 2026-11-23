@@ -27,10 +27,13 @@
 <label class="slider"><div class="spread"><span>Concept starts</span><b id="inv">00:00</b></div><input type="range" id="in" min="0" max="10" step="1" value="0"></label>
 <label class="slider"><div class="spread"><span>Concept ends</span><b id="outv">00:00</b></div><input type="range" id="out" min="0" max="10" step="1" value="10"></label>
 <div class="btns two mt"><button class="btn dark" id="playseg">Play this concept</button><button class="btn" id="export">Export clip (WebM)</button></div>
-<p class="small dim mt">Each concept becomes one 30–60 second revision clip. Export one concept at a time.</p></div></div>
+<p class="small dim mt">Each concept becomes one 30–60 second revision clip. Export one concept at a time.</p>
+<button class="btn dark block mt" id="watch">Watch &amp; find concepts</button>
+<p class="small dim mt">Gemini watches the lecture itself and marks each concept's start/end — works for files up to about 18 MB (the file goes from your browser to Google with your key). Then tap "Set the trim" on any concept below.</p></div></div>
 <div class="card"><h3>Option B — let AI map the concepts first</h3>
 <p class="sub">Paste the lecture transcript; the AI lists the key concepts in teaching order, with memory hooks.</p>
 <label class="field"><span>Lecture transcript</span><textarea class="input" id="transcript" placeholder="Paste the lecture transcript here…"></textarea></label>
+<label class="field"><span>Focus on</span><select class="input" id="focus"><option>Key concepts</option><option>Definitions &amp; formulas</option><option>Worked examples</option><option>Exam traps &amp; common mistakes</option></select><span class="small dim">What the concept map should hunt for in this lecture.</span></label>
 <button class="btn dark block mt" id="plan">Find key concepts</button>
 <div id="planresult"></div></div>
 <section class="guide"><h2>How this tool works</h2>

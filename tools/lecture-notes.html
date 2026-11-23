@@ -19,9 +19,14 @@
 <h1 class="mt">Lecture to Notes</h1>
 <p class="sub mt">Student Mode: paste a lecture transcript and get clean, structured, downloadable notes — summary, key points, definitions and formulas.</p>
 <div id="keyprompt" class="mt"></div>
-<div class="card"><h3>Make notes from a transcript</h3>
+<div class="card"><h3>Step 1 — The lecture text</h3>
 <p class="sub">Get the transcript from the lecture video (YouTube → "…" → "Open transcript") or from your class recording's captions, and paste it here.</p>
 <label class="field"><span>Lecture transcript</span><textarea class="input" id="src" placeholder="Paste the full lecture transcript here…"></textarea></label>
+<h3 class="mt2">Step 2 — Note style</h3>
+<div class="btns two">
+<label class="field"><span>Detail level</span><select class="input" id="nlevel"><option>Full notes</option><option>Quick revision (short)</option><option>Exam-focused (traps &amp; likely questions)</option></select><span class="small dim">Quick revision suits the night before; full notes suit weekly study.</span></label>
+<label class="field"><span>Notes language</span><select class="input" id="nlang"><option>English</option><option>Urdu</option><option>Roman Urdu</option><option>Hindi</option></select><span class="small dim">Technical terms stay in English in every language.</span></label>
+</div>
 <button class="btn block big mt" id="go">Make my notes</button></div>
 <div id="result"></div>
 <section class="guide"><h2>How this tool works</h2>

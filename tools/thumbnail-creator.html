@@ -19,21 +19,41 @@
 <h1 class="mt">Thumbnail Creator / Redesigner</h1>
 <p class="sub mt">Upload a thumbnail — AI analyses it, then generates completely different versions with the same text, plus a prompt chat box to create thumbnails from scratch.</p>
 <div id="keyprompt" class="mt"></div>
-<div class="card"><h3>Redesign an existing thumbnail</h3>
+<div class="tabs mt"><button class="tab on" id="tab-creator">Creator — from a prompt</button><button class="tab" id="tab-redesigner">Redesigner — fix mine</button></div>
+<div id="panel-creator">
+<div class="card"><h3>Step 1 — Describe the video</h3>
+<label class="field"><span>What is the video about?</span><input class="input" id="cprompt" placeholder="e.g. A shocked gamer winning an impossible boss fight, lava background"></label>
+<p class="small dim mt">The AI paints the background art from this. Keep faces and the main object in the description.</p>
+<h3 class="mt2">Step 2 — Headline text &amp; look</h3>
+<label class="field"><span>Headline text (big words on the thumbnail)</span><input class="input" id="chead" placeholder="e.g. IMPOSSIBLE WIN!"></label>
+<div class="btns two">
+<label class="field"><span>Art style</span><select class="input" id="cstyle"><option>Bold gaming</option><option>Clean minimal</option><option>Shocked-face reaction</option><option>Tech / neon</option><option>Study &amp; academic</option><option>Dark cinematic</option></select><span class="small dim">Sets the mood of the AI background art.</span></label>
+<label class="field"><span>Text colour</span><span class="swatches"><button class="sw-c on" data-ink="#ffffff" style="background:#ffffff" aria-label="White"></button><button class="sw-c" data-ink="#ffe46b" style="background:#ffe46b" aria-label="Yellow"></button><button class="sw-c" data-ink="#ff5b4f" style="background:#ff5b4f" aria-label="Red"></button><button class="sw-c" data-ink="#35d685" style="background:#35d685" aria-label="Green"></button><button class="sw-c" data-ink="#4aa8ff" style="background:#4aa8ff" aria-label="Blue"></button></span><span class="small dim">The headline is drawn in this colour with a heavy outline, so it reads at phone size.</span></label>
+</div>
+<h3 class="mt2">Step 3 — Size &amp; create</h3>
+<p class="small dim">Use the bar below like Google Flow: tap <b>+</b> to pick the aspect ratio (16:9 for YouTube, 9:16 for Shorts covers), then Create. The file is made at that ratio's exact pixel size.</p>
+<div class="flowbar"><button class="icon-btn" id="plusbtn" aria-label="Choose aspect ratio">＋</button><div class="grow"><b>Aspect ratio: <span id="ratiolabel">16:9</span></b><div class="small dim">Tap + to change it</div></div><button class="btn" id="cgo">Create thumbnail</button></div>
+<div class="ratiopop hidden" id="ratiopop"><div class="chips"><button class="chip" data-ratio="16:9">16:9 · YouTube</button><button class="chip" data-ratio="9:16">9:16 · Shorts</button><button class="chip" data-ratio="1:1">1:1 · Square</button><button class="chip" data-ratio="4:3">4:3 · Classic</button><button class="chip" data-ratio="3:4">3:4 · Portrait</button></div></div>
+<div id="cresult"></div></div>
+</div>
+<div id="panel-redesigner" class="hidden">
+<div class="card"><h3>Step 1 — Upload &amp; analyse</h3>
 <label class="field"><span>Upload the thumbnail</span><input class="input" type="file" id="tfile" accept="image/*"></label>
 <img id="tprev" class="prev mt hidden" alt="Uploaded thumbnail">
 <button class="btn dark block mt" id="analyse">Analyse thumbnail</button>
 <div id="aresult"></div>
-<label class="field"><span>The text (kept the SAME on every new version)</span><input class="input" id="ttext" placeholder="e.g. I SURVIVED 100 DAYS!"></label>
-<button class="btn block mt" id="makevars">Generate different versions</button>
+<h3 class="mt2">Step 2 — The text (kept the SAME on every new version)</h3>
+<label class="field"><span>Thumbnail text</span><input class="input" id="ttext" placeholder="Analyse fills this in automatically — or type it"></label>
+<p class="small dim mt">Redesigns change everything except these words: same text, completely different design.</p>
+<h3 class="mt2">Step 3 — Output size</h3>
+<div class="chips"><button class="chip" data-ratio="16:9">16:9 · YouTube</button><button class="chip" data-ratio="9:16">9:16 · Shorts</button><button class="chip" data-ratio="1:1">1:1 · Square</button><button class="chip" data-ratio="4:3">4:3 · Classic</button><button class="chip" data-ratio="3:4">3:4 · Portrait</button></div>
+<p class="small dim mt">Every version is drawn at this ratio's exact pixel size, with your photo/subject placed inside.</p>
+<button class="btn block big mt" id="makevars">Generate different versions</button>
 <div id="vars"></div></div>
-<div class="card"><h3>Or create from a prompt</h3>
-<p class="sub">Chat with the AI: describe the thumbnail you want. It generates an image with your key, or gives you a build-ready concept.</p>
-<div class="chatbox"><div class="chatlog" id="chatlog"></div>
-<div class="paste"><input class="input" id="chatin" placeholder="e.g. A shocked gamer, red background, text: IMPOSSIBLE WIN"><button class="btn sm" id="chatsend">Send</button></div></div></div>
+</div>
 <section class="guide"><h2>How this tool works</h2>
-<div class="steps-num"><div class="stp"><span class="n">1</span><div>Upload the thumbnail you want to improve (or skip the upload to start fresh).</div></div><div class="stp"><span class="n">2</span><div>Tap "Analyse thumbnail" — the AI reads the image: its topic, exact text, colours, subject and weak points, and suggests redesign directions.</div></div><div class="stp"><span class="n">3</span><div>Type the text that must stay the same, then tap "Generate different versions".</div></div><div class="stp"><span class="n">4</span><div>You get 4 versions — Bold Yellow, Dark Neon, Red Alert and Clean Mint — each a different layout, background and style, all with your exact text. Download any of them.</div></div><div class="stp"><span class="n">5</span><div>Or use the prompt chat box to generate a thumbnail from a written idea.</div></div></div>
-<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>A thumbnail image (for analysis and redesign)</li><li>The exact text for the new versions</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A designer-level analysis of your thumbnail</li><li>4 ready-to-download versions (1280×720) that look completely different</li><li>AI images or concepts from your own prompts</li></ul></div></div></div>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div><b>Creator tab:</b> describe the video, write the headline, pick an art style and text colour.</div></div><div class="stp"><span class="n">2</span><div>In the bottom bar, tap <b>+</b> and pick the aspect ratio — 16:9 for YouTube, 9:16 for Shorts. The output file is made at that ratio's exact pixel size.</div></div><div class="stp"><span class="n">3</span><div>Tap "Create thumbnail" — the AI paints the background and your headline is composed on top, ready to download.</div></div><div class="stp"><span class="n">4</span><div><b>Redesigner tab:</b> upload a thumbnail and tap "Analyse" — the AI reads its topic, exact text, subject, strengths and weaknesses.</div></div><div class="stp"><span class="n">5</span><div>Tap "Generate different versions" — you get 6 completely different designs (Bold Yellow, Dark Neon, Red Alert, Clean Mint, Purple Pop, Mono Contrast) at your chosen ratio, all keeping the SAME text.</div></div></div>
+<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>For redesigns: a thumbnail image</li><li>The exact text for the new versions (analysis fills it in for you)</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A designer-level analysis of your thumbnail</li><li>6 ready-to-download redesigns that look completely different, same text</li><li>AI-created thumbnails from a prompt, at 16:9, 9:16, 1:1, 4:3 or 3:4 exact sizes</li></ul></div></div></div>
 <h2>Tips</h2><ul><li>Keep text to 3–5 words — it must be readable at phone size.</li><li>One face, one emotion, one idea per thumbnail wins clicks.</li><li>Download two versions and A/B test them on YouTube.</li></ul>
 <h2>FAQ</h2><div class="faq"><b>Do the new versions keep my text exactly?</b><p>Yes — the version maker draws the exact text you typed on every version. Only the design changes.</p></div><div class="faq"><b>Can the prompt box really generate an image?</b><p>Yes, when your Gemini key has access to Google's image model, the image is generated and shown here. If not, the AI returns a detailed concept you can build with the version maker.</p></div></section></div>
 <footer class="site-foot"><div class="in">
