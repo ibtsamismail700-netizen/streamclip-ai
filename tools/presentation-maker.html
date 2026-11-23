@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#12100c">
-<meta name="description" content="Student Mode: enter your assignment topic and get a complete slide plan with bullets and the exact narration script for a video presentation.">
+<meta name="description" content="Student Mode: build a complete slide plan with bullets and the exact narration script — from your topic, your YouTube lecture, or your professor's reference PDF.">
 <title>Video Presentation Maker | StreamClip AI</title>
 <link rel="stylesheet" href="../css/app.css">
+<style>@page { size:landscape; margin:0; }</style>
 </head>
 <body data-tool="presentation">
 <header class="site-head"><div class="in">
@@ -17,13 +18,47 @@
 </div></header>
 <div class="wrap"><p class="small dim mt"><a href="../index.html">← All tools</a></p>
 <h1 class="mt">Video Presentation Maker</h1>
-<p class="sub mt">Student Mode: enter your assignment topic and get a complete slide plan with bullets and the exact narration script for a video presentation.</p>
+<p class="sub mt">Student Mode: get a complete slide plan with bullets and the exact narration script for a video presentation — built from your topic, your lecture, or your professor's reference PDF.</p>
 <div id="keyprompt" class="mt"></div>
-<div class="card"><h3>Step 1 — Topic &amp; must-cover points</h3>
-<label class="field"><span>Presentation topic</span><input class="input" id="topic" placeholder="e.g. How photosynthesis feeds the world"></label>
+<div class="card" id="srccard"><h3>Step 1 — Your lecture source (optional)</h3>
+<p class="sub">Have the lecture this presentation is based on? Add it — a YouTube link or a PDF — and the slides are built from it, in its own order. No source? The topic in Step 2 is enough.</p>
+<div class="tabs mt"><button class="tab on" id="src-yt">▶ YouTube lecture</button><button class="tab" id="src-pdf">PDF document</button><button class="tab" id="src-text">Paste text</button></div>
+<p class="small dim">Pick one source. Switching sources clears the material you prepared here.</p>
+<div id="panel-src-yt">
+<label class="field"><span>Lecture link</span><input class="input" id="srclink" placeholder="youtube.com/watch?v=…" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="small dim">Gemini watches the lecture itself — no transcript copying needed.</span></label>
+<button class="btn block big mt" id="scanbtn">Analyse lecture</button>
+<div class="steps hidden" id="scansteps">
+<div class="step" id="ss1"><span class="dot">1</span><span>Reading the lecture link</span></div>
+<div class="step" id="ss2"><span class="dot">2</span><span>Gemini watches the lecture</span></div>
+<div class="step" id="ss3"><span class="dot">3</span><span>Mapping the topics in order</span></div>
+</div></div>
+<div id="panel-src-pdf" class="hidden">
+<label class="field"><span>Choose the PDF</span><input class="input" type="file" id="srcpdf" accept="application/pdf"><span class="small dim">Up to about 18 MB. The file goes from your browser straight to Google with your key — it is never uploaded to this site.</span></label>
+<button class="btn block big mt" id="readpdf">Analyse PDF</button>
+<div class="steps hidden" id="pdfsteps">
+<div class="step" id="ps1"><span class="dot">1</span><span>Reading the PDF file</span></div>
+<div class="step" id="ps2"><span class="dot">2</span><span>Extracting the full text</span></div>
+<div class="step" id="ps3"><span class="dot">3</span><span>Finding the sections</span></div>
+</div>
+<p class="small dim mt" id="pdfstatus"></p></div>
+<div id="panel-src-text" class="hidden">
+<label class="field"><span>Paste notes, a chapter, or a lecture transcript</span><textarea class="input" id="srctext" placeholder="Paste the text here…"></textarea></label>
+<button class="btn dark block mt" id="usetext">Use this text</button>
+</div>
+<p class="small dim mt hidden" id="srcnote"></p>
+<div id="srcsummary"></div>
+</div>
+<div id="prog"></div>
+<div class="card"><h3>Step 2 — Topic &amp; must-cover points</h3>
+<label class="field"><span>Presentation topic</span><input class="input" id="topic" placeholder="e.g. How photosynthesis feeds the world"><span class="small dim">With a source or reference PDF, this leads as the subject — leave it empty and the subject is taken from the material itself.</span></label>
 <label class="field"><span>Points you must cover (optional)</span><textarea class="input" id="points" placeholder="One point per line…" style="min-height:70px"></textarea></label>
 <p class="small dim mt">Anything your teacher named goes here — the plan is built around those points first.</p>
-<h3 class="mt2">Step 2 — Shape of the presentation</h3>
+<h3 class="mt2">Reference PDF (optional)</h3>
+<label class="field"><span>Your professor's reference PDF</span><input class="input" type="file" id="refpdf" accept="application/pdf"><span class="small dim">Optional — your professor's reference PDF. The AI reads it, takes its topics and structure, and builds your slides from them. Up to about 18 MB.</span></label>
+<button class="btn dark block mt" id="refread">Read reference PDF</button>
+<p class="small dim mt" id="refstatus"></p>
+<div id="reftopics"></div>
+<h3 class="mt2">Step 3 — Shape of the presentation</h3>
 <div class="btns two">
 <label class="field"><span>Number of slides</span><select class="input" id="slides"><option>5</option><option selected>7</option><option>10</option><option>12</option></select><span class="small dim">7 slides ≈ a 3-minute talk. Each slide gets 20–30 seconds of script.</span></label>
 <label class="field"><span>Level</span><select class="input" id="level"><option>University</option><option>College</option><option>School</option></select><span class="small dim">Sets vocabulary depth and how formal the script sounds.</span></label>
@@ -32,19 +67,29 @@
 <label class="field"><span>Narration language</span><select class="input" id="plang"><option>English</option><option>Urdu</option><option>Hindi</option><option>Roman Urdu</option></select><span class="small dim">The voice script — and the AI voice — use this language.</span></label>
 <label class="field"><span>Speaking tone</span><select class="input" id="ptone"><option>Confident &amp; clear</option><option>Friendly &amp; simple</option><option>Formal academic</option></select><span class="small dim">How the narration sentences are written.</span></label>
 </div>
-<h3 class="mt2">Step 3 — AI voice</h3>
+<label class="field"><span>Video quality</span><select class="input" id="pquality"><option selected>1080p</option><option>720p</option><option>480p</option></select><span class="small dim">Stored with the deck and applied to video exports of this presentation; it is also shown on the download card.</span></label>
+<h3 class="mt2">Step 4 — AI voice</h3>
 <label class="field"><span>Gemini voice (for Play buttons under each slide)</span><select class="input" id="pvoice"></select><span class="small dim">Kore is a clear all-rounder. Zephyr is bright, Charon is deep, Puck is upbeat. The voice is generated by Gemini on your key when you press Play on a slide.</span></label>
 <button class="btn block big mt" id="go">Plan my presentation</button></div>
 <div id="result"></div>
+<div class="card hidden" id="moretools"><h3>More from this same lecture</h3>
+<p class="sub">No analysing again — these open with your lecture already loaded.</p>
+<div class="btns two mt">
+<a class="btn dark" href="lecture-notes.html">Lecture to Notes</a>
+<a class="btn dark" href="exam-prep.html">Exam questions — practice for your test</a>
+<a class="btn dark" href="flashcards-quiz.html">Flashcards + Quiz</a>
+<a class="btn dark" href="exam-prep.html#ask">Ask your lecture</a>
+</div></div>
 <section class="guide"><h2>How this tool works</h2>
-<div class="steps-num"><div class="stp"><span class="n">1</span><div>Write your topic and any points your teacher said must be covered.</div></div><div class="stp"><span class="n">2</span><div>Choose the number of slides and your level.</div></div><div class="stp"><span class="n">3</span><div>Tap "Plan my presentation" — you get a title, a slide-by-slide plan with bullets, and the exact words to say on each slide.</div></div><div class="stp"><span class="n">4</span><div>Build the slides in PowerPoint/Google Slides using the bullets, then record yourself reading the voice script — or read it slide by slide over a screen recording.</div></div><div class="stp"><span class="n">5</span><div>Download the voice script as a text file for practice.</div></div></div>
-<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>Your topic (and your teacher's must-cover points, if any)</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A complete slide plan with bullets</li><li>A ready-to-read narration script for every slide, downloadable as .txt</li><li>One-tap AI voice playback and .wav download per slide, in your chosen Gemini voice and language</li></ul></div></div></div>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>Optionally add the source: the YouTube lecture or PDF this presentation is based on — or your professor's <b>reference PDF</b>, whose topics are listed on the page before anything is generated.</div></div><div class="stp"><span class="n">2</span><div>Write your topic and any points your teacher said must be covered. With a reference PDF, your topic leads as the subject and the slides follow the PDF's topics and structure.</div></div><div class="stp"><span class="n">3</span><div>Choose the number of slides and your level, then tap "Plan my presentation" — you get a title, a slide-by-slide plan with bullets, and the exact words to say on each slide.</div></div><div class="stp"><span class="n">4</span><div>Build the slides in PowerPoint/Google Slides using the bullets, then record yourself reading the voice script — or press Play on any slide to hear the AI voice read it.</div></div><div class="stp"><span class="n">5</span><div>Download the voice script as a text file for practice.</div></div></div>
+<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>Your topic — and, if you have them, the lecture or your professor's reference PDF</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A complete slide plan with bullets, following your reference's topics</li><li>A ready-to-read narration script for every slide, downloadable as .txt</li><li>One-tap AI voice playback and .wav download per slide, in your chosen Gemini voice and language</li></ul></div></div></div>
 <h2>Tips</h2><ul><li>Practice the script once out loud — it is written to sound natural, not read.</li><li>Keep slides visual: bullets on the slide, full sentences in your voice.</li><li>Time yourself: each slide's script is roughly 20–30 seconds.</li></ul>
-<h2>FAQ</h2><div class="faq"><b>Does it make the video itself?</b><p>It makes the full plan and voice script — the two hard parts. Recording is you reading the script over your slides, which most teachers prefer anyway because the voice is yours.</p></div><div class="faq"><b>Can I change a slide?</b><p>Regenerate with the extra point added in the points box, or edit the downloaded script directly.</p></div></section></div>
+<h2>FAQ</h2><div class="faq"><b>Does it make the video itself?</b><p>It makes the full plan and voice script — the two hard parts. Recording is you reading the script over your slides, which most teachers prefer anyway because the voice is yours.</p></div><div class="faq"><b>What does the reference PDF change?</b><p>Everything about the content: the AI reads it first, shows you its topic list, then plans the slides along those topics — your typed topic still leads as the subject.</p></div><div class="faq"><b>Can I change a slide?</b><p>Regenerate with the extra point added in the points box, or edit the downloaded script directly.</p></div></section></div>
 <footer class="site-foot"><div class="in">
-<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
 <p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
 <p class="small dim">© 2026 StreamClip AI</p>
 </div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.js"></script>
 <script type="module" src="../js/site.js"></script>
 <script type="module" src="../js/tools.js"></script></body></html>

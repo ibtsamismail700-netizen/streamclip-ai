@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#12100c">
-<meta name="description" content="Student Mode: turn a long lecture into short revision clips of the key concepts — upload the lecture or let the AI map the concepts from the transcript.">
+<meta name="description" content="Student Mode: turn a long YouTube lecture into short revision clips of the key concepts — or get the key sections of your PDF as revision cards.">
 <title>Lecture to Revision Clips | StreamClip AI</title>
 <link rel="stylesheet" href="../css/app.css">
 </head>
@@ -17,32 +17,76 @@
 </div></header>
 <div class="wrap"><p class="small dim mt"><a href="../index.html">← All tools</a></p>
 <h1 class="mt">Lecture to Revision Clips</h1>
-<p class="sub mt">Student Mode: turn a long lecture into short revision clips of the key concepts — upload the lecture or let the AI map the concepts from the transcript.</p>
+<p class="sub mt">Student Mode: turn a long lecture into short revision clips of the key concepts — from a YouTube lecture, Gemini finds the exact concept moments; from a PDF, it picks the key sections as revision cards.</p>
 <div id="keyprompt" class="mt"></div>
-<div class="card"><h3>Option A — upload the lecture video</h3>
+<div class="card" id="srccard"><h3>Step 1 — Your lecture source</h3>
+<p class="sub">Students usually have one of two things: a YouTube lecture or a PDF. Pick yours and analyse it once.</p>
+<div class="tabs mt"><button class="tab on" id="src-yt">▶ YouTube lecture</button><button class="tab" id="src-pdf">PDF document</button><button class="tab" id="src-text">Paste text</button></div>
+<p class="small dim">Pick one source. Switching sources clears the material you prepared here.</p>
+<div id="panel-src-yt">
+<label class="field"><span>Lecture link</span><input class="input" id="srclink" placeholder="youtube.com/watch?v=…" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="small dim">Gemini watches the lecture itself — no transcript copying needed.</span></label>
+<button class="btn block big mt" id="scanbtn">Analyse lecture</button>
+<div class="steps hidden" id="scansteps">
+<div class="step" id="ss1"><span class="dot">1</span><span>Reading the lecture link</span></div>
+<div class="step" id="ss2"><span class="dot">2</span><span>Gemini watches the lecture</span></div>
+<div class="step" id="ss3"><span class="dot">3</span><span>Mapping the topics in order</span></div>
+</div></div>
+<div id="panel-src-pdf" class="hidden">
+<label class="field"><span>Choose the PDF</span><input class="input" type="file" id="srcpdf" accept="application/pdf"><span class="small dim">Up to about 18 MB. The file goes from your browser straight to Google with your key — it is never uploaded to this site.</span></label>
+<button class="btn block big mt" id="readpdf">Analyse PDF</button>
+<div class="steps hidden" id="pdfsteps">
+<div class="step" id="ps1"><span class="dot">1</span><span>Reading the PDF file</span></div>
+<div class="step" id="ps2"><span class="dot">2</span><span>Extracting the full text</span></div>
+<div class="step" id="ps3"><span class="dot">3</span><span>Finding the sections</span></div>
+</div>
+<p class="small dim mt" id="pdfstatus"></p></div>
+<div id="panel-src-text" class="hidden">
+<label class="field"><span>Paste notes, a chapter, or a lecture transcript</span><textarea class="input" id="srctext" placeholder="Paste the text here…"></textarea></label>
+<button class="btn dark block mt" id="usetext">Use this text</button>
+</div>
+<p class="small dim mt hidden" id="srcnote"></p>
+<div id="srcsummary"></div>
+</div>
+<div id="prog"></div>
+<div class="card"><h3>Step 2 — Find the key concepts</h3>
+<label class="field"><span>Focus on</span><select class="input" id="lcfocus"><option>Key concepts</option><option>Definitions &amp; formulas</option><option>Worked examples</option><option>Exam traps &amp; common mistakes</option></select><span class="small dim">What the finder should hunt for in this lecture.</span></label>
+<button class="btn block big mt" id="lcgo">Find revision clips</button>
+<div class="steps hidden" id="lcsteps">
+<div class="step" id="lcst1"><span class="dot">1</span><span>Asking Gemini about this lecture</span></div>
+<div class="step" id="lcst2"><span class="dot">2</span><span>Watching in 10-minute windows</span></div>
+<div class="step" id="lcst3"><span class="dot">3</span><span>Collecting the key concepts</span></div>
+</div>
+<p class="small dim mt" id="lcstatus"></p>
+<div id="lcresult"></div></div>
+<div class="card"><h3>Step 3 — Cut real clips from your own lecture file</h3>
+<p class="sub">Have the lecture as a file? Upload it, set a concept's start and end, and export a real revision clip — all inside your browser.</p>
 <label class="field"><span>Choose the lecture file</span><input class="input" type="file" id="vfile" accept="video/*"></label>
 <div id="stage" class="hidden">
 <div class="vidstage"><video id="vid" controls playsinline></video></div>
 <p class="small dim mt" id="dur"></p>
 <label class="slider"><div class="spread"><span>Concept starts</span><b id="inv">00:00</b></div><input type="range" id="in" min="0" max="10" step="1" value="0"></label>
 <label class="slider"><div class="spread"><span>Concept ends</span><b id="outv">00:00</b></div><input type="range" id="out" min="0" max="10" step="1" value="10"></label>
+<label class="field"><span>Export quality</span><select class="input" id="quality"><option selected>1080p</option><option>720p</option><option>480p</option></select><span class="small dim">The exported clip is scaled to this height — never upscaled past the file's own size.</span></label>
 <div class="btns two mt"><button class="btn dark" id="playseg">Play this concept</button><button class="btn" id="export">Export clip (WebM)</button></div>
 <p class="small dim mt">Each concept becomes one 30–60 second revision clip. Export one concept at a time.</p>
 <button class="btn dark block mt" id="watch">Watch &amp; find concepts</button>
-<p class="small dim mt">Gemini watches the lecture itself and marks each concept's start/end — works for files up to about 18 MB (the file goes from your browser to Google with your key). Then tap "Set the trim" on any concept below.</p></div></div>
-<div class="card"><h3>Option B — let AI map the concepts first</h3>
-<p class="sub">Paste the lecture transcript; the AI lists the key concepts in teaching order, with memory hooks.</p>
-<label class="field"><span>Lecture transcript</span><textarea class="input" id="transcript" placeholder="Paste the lecture transcript here…"></textarea></label>
-<label class="field"><span>Focus on</span><select class="input" id="focus"><option>Key concepts</option><option>Definitions &amp; formulas</option><option>Worked examples</option><option>Exam traps &amp; common mistakes</option></select><span class="small dim">What the concept map should hunt for in this lecture.</span></label>
-<button class="btn dark block mt" id="plan">Find key concepts</button>
-<div id="planresult"></div></div>
+<p class="small dim mt">Gemini watches the uploaded file itself and marks each concept's start/end — works for files up to about 18 MB (the file goes from your browser to Google with your key). Then tap "Set the trim" on any concept below.</p>
+<div id="planresult"></div></div></div>
+<div class="card hidden" id="moretools"><h3>More from this same lecture</h3>
+<p class="sub">No analysing again — these open with your lecture already loaded.</p>
+<div class="btns two mt">
+<a class="btn dark" href="lecture-notes.html">Lecture to Notes</a>
+<a class="btn dark" href="exam-prep.html">Exam questions — practice for your test</a>
+<a class="btn dark" href="flashcards-quiz.html">Flashcards + Quiz</a>
+<a class="btn dark" href="exam-prep.html#ask">Ask your lecture</a>
+</div></div>
 <section class="guide"><h2>How this tool works</h2>
-<div class="steps-num"><div class="stp"><span class="n">1</span><div>Fastest path: paste the lecture transcript and tap "Find key concepts" — you get the concept map first.</div></div><div class="stp"><span class="n">2</span><div>Upload the lecture video and use the concept timestamps to set the Start and End sliders.</div></div><div class="stp"><span class="n">3</span><div>Play the concept to check it starts and ends cleanly.</div></div><div class="stp"><span class="n">4</span><div>Export it as a revision clip (WebM), then repeat for the next concept.</div></div><div class="stp"><span class="n">5</span><div>Revise by watching your own 1-minute clips the night before the exam.</div></div></div>
-<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>The lecture video file, or its transcript for the concept map</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A concept-by-concept revision plan with memory hooks</li><li>One short exported clip per concept</li></ul></div></div></div>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>Add your source — a YouTube lecture link or a PDF — and tap <b>Analyse</b> once.</div></div><div class="stp"><span class="n">2</span><div>Tap "Find revision clips". For a YouTube lecture, Gemini watches it in 10-minute windows and lists each key concept with its real start and end times — tap a concept to watch that exact moment on YouTube.</div></div><div class="stp"><span class="n">3</span><div>For a PDF there is no video to cut, so you honestly get the <b>key sections</b> as revision cards instead — heading, summary, and why it matters. No fake timestamps, ever.</div></div><div class="stp"><span class="n">4</span><div>To download real clip files, upload your own copy of the lecture in Step 3, set the sliders to a concept's times, and export it as a WebM clip.</div></div><div class="stp"><span class="n">5</span><div>Revise by re-watching your 1-minute concepts the night before the exam.</div></div></div>
+<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>A YouTube lecture link or a PDF — plus the lecture file itself only if you want downloadable clips</li></ul></div><div class="card"><h3>What you get</h3><ul><li>Concept-by-concept revision moments with real timestamps (YouTube)</li><li>Key-section revision cards (PDF)</li><li>One short exported clip per concept from your own file</li></ul></div></div></div>
 <h2>Tips</h2><ul><li>Name each exported clip with the concept ("Clip 3 — Supply and Demand") so revision stays organised.</li><li>Keep clips under 60 seconds — one concept per clip.</li><li>Make the clips the same day you attend the lecture, while it is fresh.</li></ul>
-<h2>FAQ</h2><div class="faq"><b>Can it take a YouTube lecture link directly?</b><p>Browsers cannot download YouTube videos. Upload the lecture file, or paste the transcript (YouTube → "…" → "Open transcript") for the concept map and cut from your own copy.</p></div><div class="faq"><b>How long should a revision clip be?</b><p>30–60 seconds: one concept, one example, one hook line.</p></div></section></div>
+<h2>FAQ</h2><div class="faq"><b>Why can't the site cut the YouTube lecture directly?</b><p>Browsers cannot download YouTube videos. The finder gives you the exact concept moments with links; upload your own copy of the lecture file in Step 3 to export real clips.</p></div><div class="faq"><b>How long should a revision clip be?</b><p>30–60 seconds: one concept, one example, one hook line.</p></div></section></div>
 <footer class="site-foot"><div class="in">
-<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
 <p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
 <p class="small dim">© 2026 StreamClip AI</p>
 </div></footer>

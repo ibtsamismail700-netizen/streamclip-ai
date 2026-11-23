@@ -473,3 +473,123 @@ a.cat, a.icon-btn { text-decoration: none; }
 .togglerow { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 700; }
 .ovitem { display: flex; align-items: center; gap: 9px; margin-top: 9px; }
 .ovitem .input { flex: 1; }
+/* ----- Designed notes sheet: light paper card, one anatomy, 6 themes -----
+   Centred title + subtitle, numbered sections with pastel heading chips,
+   short bullets, Key idea boxes, formulas in bordered boxes, definition
+   boxes, Examples + Important boxes, bold Remember strip. */
+.sheet { --paper:#f8f4e9; --ink:#221d12; --mut:#6d6450; --box:#fffdf6; --line:#ddd3b8;
+  background:var(--paper); color:var(--ink); border-radius:18px; overflow:hidden;
+  box-shadow:0 6px 0 #0a0805; margin-top:12px; font-size:14.5px; line-height:1.55;
+  print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+.sheet-head { padding:20px 22px 12px; text-align:center; }
+.sheet-kicker { font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--mut); font-weight:800; }
+.sheet-head h3 { font-size:25px; line-height:1.2; margin-top:4px; }
+.sheet-sub { margin-top:5px; color:var(--mut); font-weight:600; }
+.sheet-body { padding:4px 22px 20px; }
+.sheet-sec { margin-top:18px; }
+.sheet-sec-head { display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+.sheet-num { width:26px; height:26px; flex:none; border-radius:9px; display:grid; place-items:center; font-weight:900; font-size:14px; background:var(--ink); color:var(--paper); }
+.sheet-chip { font-weight:800; font-size:15.5px; padding:3px 12px; border-radius:99px; background:#eee7d2; }
+.pc0 { background:#ffd9e8; } .pc1 { background:#d3f4e2; } .pc2 { background:#d6ecff; }
+.pc3 { background:#e9e0ff; } .pc4 { background:#ffe8d1; } .pc5 { background:#fdf0b8; }
+.sheet-time { margin-left:auto; font-size:12px; font-weight:800; background:var(--ink); color:#ffd94d; padding:3px 9px; border-radius:99px; text-decoration:none; }
+.sheet-sec ul { margin:8px 0 0 20px; } .sheet-sec li { margin:3px 0; }
+.sheet-sec p.body { margin-top:8px; }
+.sheet-key { margin-top:9px; border:2px solid var(--line); background:var(--box); border-radius:12px; padding:9px 12px; }
+.sheet-key b { display:block; font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--mut); margin-bottom:2px; }
+.sheet-fmls { display:flex; flex-wrap:wrap; gap:8px; margin-top:9px; }
+.sheet-fml { border:2px solid var(--ink); border-radius:10px; padding:5px 12px; font-weight:800; background:var(--box); }
+.sheet-h { margin-top:20px; font-size:16px; }
+.sheet-defs { display:grid; gap:8px; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); margin-top:9px; }
+.sheet-def { background:var(--box); border:1.5px solid var(--line); border-radius:12px; padding:10px 12px; }
+.sheet-def b { display:block; margin-bottom:2px; }
+.sheet-box { margin-top:16px; border-radius:14px; padding:12px 14px; background:var(--box); border:1.5px solid var(--line); }
+.sheet-box h5 { font-size:12.5px; letter-spacing:.09em; text-transform:uppercase; margin-bottom:6px; }
+.sheet-box ul { margin-left:18px; } .sheet-box li { margin:3px 0; }
+.sheet-imp { border:2px solid #e05656; background:#fff3f1; }
+.sheet-imp h5 { color:#b32626; }
+.sheet-take { margin-top:20px; background:var(--ink); color:var(--paper); border-radius:14px; padding:14px 16px; }
+.sheet-take b { color:#ffd94d; display:block; font-size:12.5px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:4px; }
+.sheet-take ul { margin-left:18px; }
+.designchips { margin-top:16px; align-items:center; }
+/* Theme 1 — Sticky Notes (default look): sticky-style boxes, yellow Remember */
+.th-sticky .sheet-def, .th-sticky .sheet-key { box-shadow:2px 3px 0 rgba(34,29,18,.13); }
+.th-sticky .sheet-take { background:#ffd94d; color:#221d12; }
+.th-sticky .sheet-take b { color:#221d12; }
+/* Theme 2 — Notebook Classic: ruled paper, navy/red, dashed formula boxes */
+.sheet.th-notebook { --paper:#fbfaf3; --ink:#1c2f57; --mut:#7a6a55; --box:#fffef9; --line:#c9d2e8;
+  background-image:repeating-linear-gradient(180deg, transparent 0 27px, rgba(60,90,160,.10) 27px 28px); }
+.th-notebook .sheet-head h3 { color:#b32626; text-transform:uppercase; letter-spacing:.03em; }
+.th-notebook .sheet-chip { background:transparent; color:#1c2f57; border-radius:0; padding-left:2px; }
+.th-notebook .sheet-num { background:#b32626; color:#fff; border-radius:50%; }
+.th-notebook .sheet-fml { border-style:dashed; border-color:#b32626; }
+.th-notebook .sheet-time { background:#1c2f57; color:#ffe9a8; }
+.th-notebook .sheet-take { background:#b32626; color:#fff; }
+.th-notebook .sheet-take b { color:#ffe9a8; }
+/* Theme 3 — Pastel Laws: lavender/purple family */
+.sheet.th-pastel { --paper:#f7f2fd; --ink:#33224d; --mut:#8a7aa8; --box:#fffbff; --line:#ddd0f2; }
+.th-pastel .sheet-num { background:#8b6cc9; color:#fff; }
+.th-pastel .sheet-chip { background:#e9defc; }
+.th-pastel .sheet-key { border-color:#b79ce0; background:#f3ecfe; }
+.th-pastel .sheet-take { background:#8b6cc9; color:#fff; }
+.th-pastel .sheet-take b { color:#ffe9f6; }
+/* Theme 4 — Mint Fresh: green minimal */
+.sheet.th-mint { --paper:#f1faf4; --ink:#173d2a; --mut:#5f7d6c; --box:#ffffff; --line:#cdeeda; }
+.th-mint .sheet-chip { background:#d8f5e3; }
+.th-mint .sheet-num { background:#1d9e63; color:#fff; }
+.th-mint .sheet-take { background:#1d9e63; color:#fff; }
+.th-mint .sheet-take b { color:#eafff3; }
+/* Theme 5 — Sky Minimal: clean blue/white, extra whitespace */
+.sheet.th-sky { --paper:#fdfeff; --ink:#14324f; --mut:#6b8299; --box:#ffffff; --line:#dcebf7; }
+.th-sky .sheet-sec { margin-top:24px; }
+.th-sky .sheet-chip { background:#e3f1fd; }
+.th-sky .sheet-num { background:#2b7cd3; color:#fff; }
+.th-sky .sheet-take { background:#2b7cd3; color:#fff; }
+.th-sky .sheet-take b { color:#eaf6ff; }
+/* Theme 6 — Peach Warm: warm peach/cream */
+.sheet.th-peach { --paper:#fdf2e7; --ink:#4a2c14; --mut:#97755a; --box:#fffaf3; --line:#f0d9c2; }
+.th-peach .sheet-chip { background:#ffdfc2; }
+.th-peach .sheet-num { background:#e07f2e; color:#fff; }
+.th-peach .sheet-take { background:#e07f2e; color:#fff; }
+.th-peach .sheet-take b { color:#fff3df; }
+/* Print: only the chosen sheet prints */
+@media print {
+  body.printmode * { visibility:hidden !important; }
+  body.printmode .sheet.picked, body.printmode .sheet.picked * { visibility:visible !important; }
+  body.printmode .sheet.picked { position:fixed; left:0; top:0; width:100%; box-shadow:none; border-radius:0; }
+}
+/* ----- Job progress ring (AlphaPost-style): honest %, steps derived ----- */
+.prog { margin-top:14px; border-radius:18px; padding:18px 16px 14px; background:linear-gradient(180deg,#1b2333,#12172a); border:1px solid rgba(255,255,255,.08); box-shadow:0 6px 0 #0a0805; text-align:center; }
+.prog .ringwrap { position:relative; width:132px; height:132px; margin:2px auto 4px; }
+.prog svg.ring { width:132px; height:132px; transform:rotate(-90deg); }
+.prog .ring .track { stroke:rgba(255,255,255,.10); }
+.prog .ring .bar { stroke:var(--y2); transition:stroke-dashoffset .45s ease; }
+.prog.fail .ring .bar { stroke:var(--red); }
+.prog .pct { position:absolute; inset:0; display:grid; place-items:center; font-family:'Hawk','Poppins',sans-serif; font-size:31px; font-weight:900; color:#fff; }
+.prog .pstep { font-weight:800; color:#fff; font-size:15.5px; min-height:22px; }
+.prog .psteps { list-style:none; margin:12px auto 2px; max-width:340px; text-align:left; display:grid; gap:8px; }
+.prog .psteps li { display:flex; gap:10px; align-items:center; color:var(--dim); font-weight:600; font-size:14px; }
+.prog .psteps .n { width:24px; height:24px; flex:none; border-radius:50%; display:grid; place-items:center; font-size:12.5px; font-weight:900; background:rgba(255,255,255,.10); color:#cfd6e4; }
+.prog .psteps li.done { color:#e8ecf4; }
+.prog .psteps li.done .n { background:var(--y2); color:var(--ydark); }
+.prog .psteps li.now { color:#fff; font-weight:800; }
+.prog .psteps li.now .n { background:#fff; color:#12172a; }
+.prog .psteps li.bad { color:#ff9a92; }
+.prog .psteps li.bad .n { background:var(--red); color:#fff; }
+.prog .pmsg { color:#ff9a92; font-size:13.5px; margin-top:8px; }
+/* ----- Print-only presentation deck (Download PDF route) ----- */
+.deckprint { display:none; }
+@media print {
+  body.printdeck * { visibility:hidden !important; }
+  body.printdeck .deckprint { display:block; visibility:visible !important; }
+  body.printdeck .deckprint, body.printdeck .deckprint * { visibility:visible !important; }
+  body.printdeck .deckprint { position:absolute; left:0; top:0; width:100%; }
+  body.printdeck .pslide { width:100%; height:100vh; padding:7vh 8vw; box-sizing:border-box; background:#fff; color:#14100a; page-break-after:always; overflow:hidden; }
+  body.printdeck .pslide .bar { width:64px; height:8px; background:#ffc81f; border-radius:99px; margin-bottom:18px; }
+  body.printdeck .pslide h2 { font-size:30px; line-height:1.25; }
+  body.printdeck .pslide ul { margin:16px 0 0 22px; font-size:17px; line-height:1.6; }
+  body.printdeck .pslide .narr { margin-top:18px; font-size:12.5px; color:#555; }
+  body.printdeck .pslide.title { display:flex; flex-direction:column; justify-content:center; background:#12100c; color:#fff; }
+  body.printdeck .pslide.title h2 { font-size:40px; }
+  body.printdeck .pslide.title p { color:#ffc81f; font-weight:700; margin-top:10px; font-size:17px; }
+}

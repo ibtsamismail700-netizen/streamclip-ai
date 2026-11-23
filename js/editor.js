@@ -199,7 +199,7 @@ export function initEditor(ctx) {
     $('ed-startv').textContent = fmtCut(b.cutStart);
     $('ed-endv').textContent = fmtCut(b.cutEnd);
     $('ed-length').textContent = `Length: ${(b.cutEnd - b.cutStart).toFixed(1)}s`;
-    $('ed-sub').textContent = `${fmtT(b.cutEnd - b.cutStart)} · from ${ctx.getStreamTitle()}`;
+    $('ed-sub').textContent = `${fmtT(b.cutEnd - b.cutStart)} · from ${ctx.getStreamTitle()}${ctx.getQuality ? ` · Quality ${ctx.getQuality()}` : ''}`;
   }
   function syncControls() {
     const b = cur.brief;
@@ -250,7 +250,7 @@ export function initEditor(ctx) {
     $('editor').classList.remove('hidden');
     $('ed-title').textContent = b.topTitle || m.title || 'Clip';
     const dur = (b.cutStart != null && b.cutEnd != null) ? b.cutEnd - b.cutStart : null;
-    $('ed-sub').textContent = `${dur != null ? fmtT(dur) : '—'} · from ${ctx.getStreamTitle()}`;
+    $('ed-sub').textContent = `${dur != null ? fmtT(dur) : '—'} · from ${ctx.getStreamTitle()}${ctx.getQuality ? ` · Quality ${ctx.getQuality()}` : ''}`;
     const wl = $('ed-watchlink');
     if (ctx.getMode() === 'yt' && ctx.getVideoId() && m.startSec != null) {
       wl.href = `https://www.youtube.com/watch?v=${ctx.getVideoId()}&t=${Math.max(0, Math.floor(m.startSec))}s`;

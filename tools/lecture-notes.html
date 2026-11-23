@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#12100c">
-<meta name="description" content="Student Mode: paste a lecture transcript and get clean, structured, downloadable notes — summary, key points, definitions and formulas.">
+<meta name="description" content="Student Mode: paste a YouTube lecture link or upload a PDF, analyse it once, and get a designed, downloadable notes sheet in easy language — sections in the lecture's own order.">
 <title>Lecture to Notes | StreamClip AI</title>
 <link rel="stylesheet" href="../css/app.css">
 </head>
@@ -17,27 +17,70 @@
 </div></header>
 <div class="wrap"><p class="small dim mt"><a href="../index.html">← All tools</a></p>
 <h1 class="mt">Lecture to Notes</h1>
-<p class="sub mt">Student Mode: paste a lecture transcript and get clean, structured, downloadable notes — summary, key points, definitions and formulas.</p>
+<p class="sub mt">Student Mode: give it your YouTube lecture or your PDF, analyse it once, and get a designed notes sheet — easy language, sections in the lecture's own order, ready to download as a picture.</p>
 <div id="keyprompt" class="mt"></div>
-<div class="card"><h3>Step 1 — The lecture text</h3>
-<p class="sub">Get the transcript from the lecture video (YouTube → "…" → "Open transcript") or from your class recording's captions, and paste it here.</p>
-<label class="field"><span>Lecture transcript</span><textarea class="input" id="src" placeholder="Paste the full lecture transcript here…"></textarea></label>
-<h3 class="mt2">Step 2 — Note style</h3>
+<div class="card" id="srccard"><h3>Step 1 — Your lecture source</h3>
+<p class="sub">Students usually have one of two things: a YouTube lecture or a PDF. Pick yours and analyse it once — the notes, and every other output, are then made from that same material.</p>
+<div class="tabs mt"><button class="tab on" id="src-yt">▶ YouTube lecture</button><button class="tab" id="src-pdf">PDF document</button><button class="tab" id="src-text">Paste text</button></div>
+<p class="small dim">Pick one source. Switching sources clears the material you prepared here.</p>
+<div id="panel-src-yt">
+<label class="field"><span>Lecture link</span><input class="input" id="srclink" placeholder="youtube.com/watch?v=…" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="small dim">Gemini watches the lecture itself — no transcript copying needed.</span></label>
+<button class="btn block big mt" id="scanbtn">Analyse lecture</button>
+<div class="steps hidden" id="scansteps">
+<div class="step" id="ss1"><span class="dot">1</span><span>Reading the lecture link</span></div>
+<div class="step" id="ss2"><span class="dot">2</span><span>Gemini watches the lecture</span></div>
+<div class="step" id="ss3"><span class="dot">3</span><span>Mapping the topics in order</span></div>
+</div></div>
+<div id="panel-src-pdf" class="hidden">
+<label class="field"><span>Choose the PDF</span><input class="input" type="file" id="srcpdf" accept="application/pdf"><span class="small dim">Up to about 18 MB. The file goes from your browser straight to Google with your key — it is never uploaded to this site.</span></label>
+<button class="btn block big mt" id="readpdf">Analyse PDF</button>
+<div class="steps hidden" id="pdfsteps">
+<div class="step" id="ps1"><span class="dot">1</span><span>Reading the PDF file</span></div>
+<div class="step" id="ps2"><span class="dot">2</span><span>Extracting the full text</span></div>
+<div class="step" id="ps3"><span class="dot">3</span><span>Finding the sections</span></div>
+</div>
+<p class="small dim mt" id="pdfstatus"></p></div>
+<div id="panel-src-text" class="hidden">
+<label class="field"><span>Paste notes, a chapter, or a lecture transcript</span><textarea class="input" id="srctext" placeholder="Paste the text here…"></textarea></label>
+<button class="btn dark block mt" id="usetext">Use this text</button>
+</div>
+<p class="small dim mt hidden" id="srcnote"></p>
+<div id="srcsummary"></div>
+</div>
+<div id="prog"></div>
+<div class="card"><h3>Step 2 — Notes options</h3>
 <div class="btns two">
-<label class="field"><span>Detail level</span><select class="input" id="nlevel"><option>Full notes</option><option>Quick revision (short)</option><option>Exam-focused (traps &amp; likely questions)</option></select><span class="small dim">Quick revision suits the night before; full notes suit weekly study.</span></label>
-<label class="field"><span>Notes language</span><select class="input" id="nlang"><option>English</option><option>Urdu</option><option>Roman Urdu</option><option>Hindi</option></select><span class="small dim">Technical terms stay in English in every language.</span></label>
+<label class="field"><span>Length</span><select class="input" id="nlen"><option>Short revision</option><option selected>Full notes</option><option>Detailed chapter-wise</option></select><span class="small dim">Short suits the night before; detailed suits weekly study.</span></label>
+<label class="field"><span>Style</span><select class="input" id="nstyle"><option selected>Bullet points</option><option>Headings + paragraphs</option><option>Exam-focused</option></select><span class="small dim">Exam-focused adds likely questions and traps to the sheet.</span></label>
+</div>
+<div class="btns two">
+<label class="field"><span>Language</span><select class="input" id="nlang"><option selected>English</option><option>Urdu</option><option>Hindi</option><option>Roman Urdu</option></select><span class="small dim">Technical terms stay in English in every language.</span></label>
+<div class="field"><span>Easy language</span><div class="switch on" id="neasy"><b>Explain in easy language</b><span class="tg"></span></div><span class="small dim">Simple words and everyday examples, so every point is understood word by word. On by default.</span></div>
 </div>
 <button class="btn block big mt" id="go">Make my notes</button></div>
 <div id="result"></div>
+<div class="card"><h3>One-page revision sheet</h3>
+<p class="sub">The whole lecture on one designed page — key points, definitions, formulas and the must-remember lines. Print it or pin the picture.</p>
+<button class="btn dark block mt" id="sheetgo">Make my revision sheet</button>
+<div id="sheetresult"></div></div>
+<div class="card hidden" id="moretools"><h3>More from this same lecture</h3>
+<p class="sub">No analysing again — these open with your lecture already loaded.</p>
+<div class="btns two mt">
+<a class="btn dark" href="exam-prep.html">Exam questions — practice for your test</a>
+<a class="btn dark" href="flashcards-quiz.html">Flashcards + Quiz</a>
+<a class="btn dark" href="exam-prep.html#ask">Ask your lecture</a>
+<a class="btn dark" href="lecture-clips.html">Revision clips &amp; sections</a>
+</div></div>
 <section class="guide"><h2>How this tool works</h2>
-<div class="steps-num"><div class="stp"><span class="n">1</span><div>Copy the lecture transcript and paste it in the box.</div></div><div class="stp"><span class="n">2</span><div>Tap "Make my notes" — the AI reads the whole lecture once.</div></div><div class="stp"><span class="n">3</span><div>You get a titled note set: summary, key points, definitions, formulas & facts, and a "remember" list.</div></div><div class="stp"><span class="n">4</span><div>Download the notes as a Markdown file, or copy them into your notebook app.</div></div></div>
-<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>The lecture transcript (the longer and cleaner, the better the notes)</li></ul></div><div class="card"><h3>What you get</h3><ul><li>Structured, downloadable revision notes</li><li>Definitions and formulas pulled out separately</li></ul></div></div></div>
-<h2>Tips</h2><ul><li>Clean transcripts make clean notes — remove "[Music]" and applause lines first.</li><li>Make notes per lecture, not per course — small sets revise better.</li><li>Read the "remember" list out loud once; it is built for last-minute revision.</li></ul>
-<h2>FAQ</h2><div class="faq"><b>Will it invent facts not in the lecture?</b><p>The notes writer is instructed to stay exact to your transcript. Still, glance through before an exam — you are responsible for your final notes.</p></div><div class="faq"><b>What format is the download?</b><p>Markdown (.md) — it opens in Notion, Obsidian, Google Docs (via import) and any text editor.</p></div></section></div>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>Paste the YouTube lecture link — or upload the PDF — and tap <b>Analyse</b>. Gemini watches/reads the whole thing once and maps its topics in their own order.</div></div><div class="stp"><span class="n">2</span><div>Choose length, style and language. "Explain in easy language" is on by default — simple words, word-by-word understanding.</div></div><div class="stp"><span class="n">3</span><div>Tap "Make my notes" — you get a designed notes sheet: big title, numbered sections, key-idea boxes, formulas in boxes, and a Remember strip. For a YouTube lecture, each section links to that exact moment in the video.</div></div><div class="stp"><span class="n">4</span><div>Switch the sheet's design (six looks, or Auto for variety), download it as a picture (PNG), print it, or save the .md file.</div></div><div class="stp"><span class="n">5</span><div>Use the same analysed lecture for exam questions, flashcards, a revision sheet and questions — no rescanning.</div></div></div>
+<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>A YouTube lecture link, a PDF (up to ~18 MB), or pasted text</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A designed, printable notes sheet in 6 looks</li><li>Sections in the lecture's own order, with video timestamps for YouTube lectures</li><li>Easy-language notes in English, Urdu, Hindi or Roman Urdu</li></ul></div></div></div>
+<h2>Tips</h2><ul><li>Make notes per lecture, not per course — small sets revise better.</li><li>Read the Remember strip out loud once; it is built for last-minute revision.</li><li>Try the Exam-focused style a week before the paper — it surfaces the traps.</li></ul>
+<h2>FAQ</h2><div class="faq"><b>Will it invent facts not in the lecture?</b><p>The notes writer is instructed to stay exact to your material and keep its order. Still, glance through before an exam — you are responsible for your final notes.</p></div><div class="faq"><b>Do I have to analyse again for flashcards or exam questions?</b><p>No. Once a lecture is analysed here, the other student tools open with it already loaded.</p></div><div class="faq"><b>Why is there no timestamp on my PDF notes?</b><p>A PDF has no video timeline — its notes use the document's own section headings instead. Timestamps are only ever shown for YouTube lectures, and they are real.</p></div></section></div>
 <footer class="site-foot"><div class="in">
-<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
 <p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
 <p class="small dim">© 2026 StreamClip AI</p>
 </div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script type="module" src="../js/site.js"></script>
 <script type="module" src="../js/tools.js"></script></body></html>

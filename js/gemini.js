@@ -203,7 +203,9 @@ function googleRetryMs(e) {
  * ~25s (a stalled request moves on instead of hanging), and the whole
  * call — rotation plus retries — gives up after ~75s. While a backoff
  * wait runs, opts.onRetry({ attempt, total, waitMs }) fires so the UI can
- * say "Google is busy — retrying…" instead of spinning in silence.
+ * say "Google is busy — retrying…" instead of spinning in silence — but
+ * only from the second backoff round onward: round one is a silent quick
+ * retry, so a single momentary 429 never shows the notice.
  */
 async function callWithRotation({ models, keys, timeoutMs = ATTEMPT_TIMEOUT_MS, makeBody, extract, failPrefix, emptyMessage, stopOnInvalidKey = true, onRetry = null }) {
   const deadline = Date.now() + TOTAL_BUDGET_MS;
@@ -214,7 +216,12 @@ async function callWithRotation({ models, keys, timeoutMs = ATTEMPT_TIMEOUT_MS, 
     if (round > 0) {
       const wait = Math.min(Math.max(BACKOFF_MS[round - 1], googleRetryMs(rateError)), deadline - Date.now());
       if (wait <= 0) break;
-      if (onRetry) { try { onRetry({ attempt: round, total: BACKOFF_MS.length, waitMs: wait }); } catch { /* UI only */ } }
+      // The first backoff round stays silent: a single momentary 429 has
+      // already been absorbed by rotating through every model/key once, and
+      // one quiet wait follows. The visible "Google is busy — retrying"
+      // progress starts only at the SECOND backoff round — when Google is
+      // genuinely saturated, not on one momentary limit hit.
+      if (onRetry && round >= 2) { try { onRetry({ attempt: round, total: BACKOFF_MS.length, waitMs: wait }); } catch { /* UI only */ } }
       await sleep(wait);
     }
     const retry = [];

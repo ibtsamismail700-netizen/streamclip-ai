@@ -14,6 +14,36 @@ const retryNote = (btn, el) => ({ attempt, total }) => {
   if (btn) btn.innerHTML = `<span class="spin"></span> ${msg}`;
   if (el) el.textContent = msg;
 };
+/* ---------- Job progress ring (shared, AlphaPost-style) ----------
+ * Honest progress only: the % is steps completed plus a within-step
+ * fraction ONLY where the code truly knows it (scan windows done, versions
+ * made, slides voiced). Nothing here creeps forward on a timer. */
+function makeProgress(container, stepNames) {
+  if (!container) return { setStep() {}, setFraction() {}, done() {}, fail() {} };
+  const C = 2 * Math.PI * 52;
+  container.innerHTML = `<div class="prog"><div class="ringwrap"><svg class="ring" viewBox="0 0 132 132"><circle class="track" cx="66" cy="66" r="52" fill="none" stroke-width="11"/><circle class="bar" cx="66" cy="66" r="52" fill="none" stroke-width="11" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C}"/></svg><div class="pct">0%</div></div><div class="pstep"></div><ul class="psteps">${stepNames.map((s, i) => `<li data-i="${i}"><span class="n">${i + 1}</span><span class="t">${esc(s)}</span></li>`).join('')}</ul><p class="pmsg hidden"></p></div>`;
+  const bar = container.querySelector('.bar'), pctEl = container.querySelector('.pct'), cur = container.querySelector('.pstep'), msg = container.querySelector('.pmsg');
+  const lis = [...container.querySelectorAll('.psteps li')];
+  const N = stepNames.length;
+  let step = 0, frac = 0, failed = false;
+  const paint = () => {
+    const p = Math.max(0, Math.min(100, Math.round(((step + frac) / N) * 100)));
+    bar.style.strokeDashoffset = String(C * (1 - p / 100));
+    pctEl.textContent = p + '%';
+    lis.forEach((li, i) => {
+      li.className = i < step ? 'done' : i === step ? (failed ? 'bad' : 'now') : '';
+      li.querySelector('.n').textContent = i < step ? '✓' : String(i + 1);
+    });
+    if (!failed && step < N) cur.textContent = lis[step].querySelector('.t').textContent;
+  };
+  paint();
+  return {
+    setStep(i, name) { step = Math.max(0, Math.min(N - 1, i)); frac = 0; if (name && lis[step]) lis[step].querySelector('.t').textContent = name; paint(); },
+    setFraction(f) { frac = Math.max(0, Math.min(1, Number(f) || 0)); paint(); },
+    done() { step = N - 1; frac = 1; paint(); },
+    fail(m) { failed = true; container.querySelector('.prog').classList.add('fail'); paint(); if (m) { msg.textContent = m; msg.classList.remove('hidden'); } },
+  };
+}
 const out = (id, html) => { const el = $(id); if (el) el.innerHTML = html; };
 const on = (id, ev, fn) => { const el = $(id); if (el) el.addEventListener(ev, fn); };
 function download(name, content, type) {
@@ -70,8 +100,298 @@ function chunkText(text, size = 5000) {
   return chunks.length ? chunks : [text];
 }
 
+/* ---------- Student Mode: shared lecture source (YouTube / PDF / text) ----------
+ * Every student tool starts from the same source step. Students have either
+ * a YouTube lecture or a PDF (or pasted text). Analysing a source prepares it
+ * once; every output on the page — and, via a localStorage handoff, every
+ * other student tool — then works from that same material without rescanning.
+ */
+const STUDENT_TOOLS = ['notes', 'flashcards', 'presentation', 'lecture-clips', 'examprep'];
+const SRC_LS = 'sc_student_source_v1';
+const SRC_FROM = { notes: 'Notes', flashcards: 'Flashcards + Quiz', presentation: 'Presentation Maker', 'lecture-clips': 'Revision Clips', examprep: 'Exam Prep' };
+let SRC = null; // {type:'youtube'|'pdf'|'text', link, videoId, text, pdfName, title, durationSec, chapters:[{title,startSec}], ready}
+const srcYtId = (u) => { const m = String(u || '').match(/(?:youtube\.com\/(?:watch\?[^#]*v=|live\/|shorts\/)|youtu\.be\/)([\w-]{6,})/); return m ? m[1] : ''; };
+const srcPart = () => ({ fileData: { fileUri: SRC.link, mimeType: 'video/*' } });
+const srcReady = () => !!(SRC && SRC.ready);
+function requireSource() {
+  if (srcReady()) return true;
+  toast('First add your lecture in Step 1 — a YouTube link, a PDF, or pasted text — and tap Analyse.', true);
+  const el = $('srccard'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  return false;
+}
+/** JSON generation from whichever source is prepared. */
+async function sourceJson(prompt, opts = {}) {
+  if (!srcReady()) throw new Error('Add your lecture source first (Step 1).');
+  if (SRC.type === 'youtube') return geminiPartsJson([srcPart(), { text: prompt }], { temperature: 0.5, timeoutMs: 240000, ...opts });
+  return geminiJson(`${prompt}\n\n--- THE MATERIAL ---\n${String(SRC.text || '').slice(0, 60000)}`, opts);
+}
+/** Plain-text generation from whichever source is prepared. */
+async function sourceText(prompt, opts = {}) {
+  if (!srcReady()) throw new Error('Add your lecture source first (Step 1).');
+  if (SRC.type === 'youtube') return geminiParts([srcPart(), { text: prompt }], { temperature: 0.5, timeoutMs: 240000, ...opts });
+  return geminiText(`${prompt}\n\n--- THE MATERIAL ---\n${String(SRC.text || '').slice(0, 60000)}`, opts);
+}
+function sstep(id, state, text) { const el = $(id); if (!el) return; el.className = 'step' + (state ? ' ' + state : ''); const s = el.querySelector('span:last-child'); if (s && text) s.textContent = text; }
+function saveHandoff() {
+  if (!SRC) return;
+  try {
+    localStorage.setItem(SRC_LS, JSON.stringify({
+      type: SRC.type, link: SRC.link || '', text: SRC.type === 'youtube' ? '' : (SRC.text || ''),
+      pdfName: SRC.pdfName || '', title: SRC.title || '', durationSec: SRC.durationSec || 0,
+      chapters: SRC.chapters || [], from: tool,
+    }));
+  } catch { /* a very large PDF text may exceed storage — the page still works */ }
+}
+function renderSrcSummary() {
+  const host = $('srcsummary'); if (!host) return;
+  if (!srcReady()) { host.innerHTML = ''; return; }
+  const isYt = SRC.type === 'youtube';
+  const head = isYt ? 'Lecture analysed' : SRC.type === 'pdf' ? 'PDF analysed' : 'Text ready';
+  const meta = isYt
+    ? `${esc(SRC.title || 'YouTube lecture')}${SRC.durationSec ? ` · ${fmt(SRC.durationSec)} long` : ''}`
+    : SRC.type === 'pdf'
+      ? `${esc(SRC.pdfName || 'Your PDF')} · content ready${SRC.text ? ` · ${SRC.text.length.toLocaleString()} characters read` : ''}`
+      : `${String(SRC.text || '').length.toLocaleString()} characters · ${String(SRC.text || '').trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words`;
+  const chapters = (SRC.chapters || []).length ? `<b style="display:block" class="mt">${isYt ? 'Topics found, in lecture order' : 'Sections found, in order'}</b><ul>${SRC.chapters.map(c => {
+    const t = isYt && c.startSec != null ? ` <a href="https://www.youtube.com/watch?v=${SRC.videoId}&t=${Math.max(0, Math.floor(c.startSec))}s" target="_blank" rel="noopener">▶ ${fmt(c.startSec)}</a>` : '';
+    return `<li>${esc(c.title)}${t}</li>`;
+  }).join('')}</ul>` : '';
+  host.innerHTML = `<div class="outcard"><div class="spread"><b>✓ ${head}</b><span class="tag y">${isYt ? 'YouTube' : SRC.type === 'pdf' ? 'PDF' : 'Text'}</span></div><p class="small dim mt">${meta}</p>${chapters}<p class="small dim mt">Every tool below now works from this material — no need to analyse again.</p></div>`;
+  const mt = $('moretools'); if (mt) mt.classList.remove('hidden');
+}
+function setSource(src) {
+  SRC = src;
+  renderSrcSummary();
+  saveHandoff();
+}
+function clearSource() {
+  SRC = null;
+  try { localStorage.removeItem(SRC_LS); } catch { /* ignore */ }
+  renderSrcSummary();
+  const mt = $('moretools'); if (mt) mt.classList.add('hidden');
+  const note = $('srcnote'); if (note) note.classList.add('hidden');
+}
+if (STUDENT_TOOLS.includes(tool)) {
+  let srcTab = 'yt', pendingPdf = null;
+  const setSrcTab = (t) => {
+    srcTab = t;
+    for (const k of ['yt', 'pdf', 'text']) {
+      const tab = $(`src-${k}`); if (tab) tab.classList.toggle('on', k === t);
+      const panel = $(`panel-src-${k}`); if (panel) panel.classList.toggle('hidden', k !== t);
+    }
+  };
+  on('src-yt', 'click', () => { setSrcTab('yt'); clearSource(); });
+  on('src-pdf', 'click', () => { setSrcTab('pdf'); clearSource(); });
+  on('src-text', 'click', () => { setSrcTab('text'); clearSource(); });
+  // --- Analyse a YouTube lecture: Gemini watches the whole video once ---
+  on('scanbtn', 'click', async (e) => {
+    if (!requireKey()) return;
+    const link = $('srclink').value.trim();
+    const id = srcYtId(link);
+    if (!id) { toast('Paste a proper YouTube lecture link first.', true); return; }
+    const b = e.currentTarget; busy(b, true);
+    const prog = makeProgress($('prog'), ['Reading the source', 'Analysing the lecture', 'Ready']);
+    $('scansteps').classList.remove('hidden');
+    sstep('ss1', 'now', 'Reading the lecture link…');
+    sstep('ss2', '', 'Gemini watches the lecture');
+    sstep('ss3', '', 'Mapping the topics in order');
+    try {
+      sstep('ss1', 'ok', 'Lecture link accepted');
+      sstep('ss2', 'now', 'Gemini is watching the whole lecture…');
+      prog.setStep(1);
+      const d = await geminiPartsJson([{ fileData: { fileUri: link, mimeType: 'video/*' } }, { text: `Watch this whole lecture video carefully. Return JSON only: {"title":"...","durationSec":0,"chapters":[{"title":"...","startSec":0}]}
+title: the lecture's real title. durationSec: its total length in seconds (0 only if you truly cannot tell). chapters: the main topics in the EXACT order they are taught (never reshuffled), each with startSec = the second from the video start where that topic begins. Up to 12 chapters.` }], { temperature: 0.3, timeoutMs: 240000, onRetry: ({ attempt, total }) => sstep('ss2', 'now', `Google is busy — retrying (${attempt}/${total})…`) });
+      sstep('ss2', 'ok', 'Lecture watched');
+      const chapters = (d.chapters || []).map(c => ({ title: String(c.title || 'Topic'), startSec: parseTs(c.startSec) })).filter(c => c.title);
+      setSource({ type: 'youtube', link, videoId: id, title: d.title || '', durationSec: Number(d.durationSec) || 0, chapters, ready: true });
+      sstep('ss3', 'ok', chapters.length ? `${chapters.length} topics mapped, in lecture order` : 'Topics mapped');
+      prog.done();
+      toast('Lecture analysed — now choose your options below.');
+    } catch (err) { sstep('ss2', '', 'Watching stopped'); prog.fail(err.message); toast('Analyse failed: ' + err.message, true); }
+    busy(b, false, 'Analyse lecture');
+  });
+  // --- Analyse a PDF: Gemini extracts its full content once ---
+  on('srcpdf', 'change', (e) => {
+    pendingPdf = e.target.files?.[0] || null;
+    const st = $('pdfstatus');
+    if (st) st.textContent = pendingPdf ? `Selected: ${pendingPdf.name} (${(pendingPdf.size / 1048576).toFixed(1)} MB) — tap "Analyse PDF".` : '';
+  });
+  on('readpdf', 'click', async (e) => {
+    if (!requireKey()) return;
+    if (!pendingPdf) { toast('Choose your PDF file first.', true); return; }
+    if (pendingPdf.size > 18 * 1024 * 1024) { toast('This PDF is over ~18 MB — too big to send to Gemini from the browser. Split it or use a smaller copy.', true); return; }
+    const b = e.currentTarget; busy(b, true);
+    const prog = makeProgress($('prog'), ['Reading the file', 'Extracting the text', 'Ready']);
+    $('pdfsteps').classList.remove('hidden');
+    sstep('ps1', 'now', 'Reading the PDF file…');
+    sstep('ps2', '', 'Extracting the full text');
+    sstep('ps3', '', 'Finding the sections');
+    const st = $('pdfstatus');
+    try {
+      const part = await fileToInline(pendingPdf); // PDF goes to Google as an inlineData part
+      sstep('ps1', 'ok', 'PDF file read');
+      sstep('ps2', 'now', 'Gemini is extracting the full text…');
+      prog.setStep(1);
+      const d = await geminiPartsJson([part, { text: `Extract the content of this PDF document for a student. Return JSON only: {"text":"...","sections":["..."],"pageCount":0}
+text: the FULL text of the document in reading order — do not summarise, skip or shorten it; keep headings on their own lines. sections: the main section headings, in the document's own order. pageCount: the number of pages in this PDF if you can tell, otherwise 0.` }], { temperature: 0.2, timeoutMs: 240000, onRetry: ({ attempt, total }) => sstep('ps2', 'now', `Google is busy — retrying (${attempt}/${total})…`) });
+      const text = String(d.text || '').trim();
+      if (text.length < 80) throw new Error('No readable text came out of this PDF. If it is scanned images, paste the text instead.');
+      sstep('ps2', 'ok', 'Text extracted');
+      const pages = Number(d.pageCount) || 0;
+      if (st) st.textContent = pages > 0 ? `PDF read — ${pages} pages of content ready.` : 'PDF read — content ready.';
+      setSource({ type: 'pdf', text, pdfName: pendingPdf.name, title: '', durationSec: 0, chapters: (d.sections || []).map(s => ({ title: String(s), startSec: null })), ready: true });
+      sstep('ps3', 'ok', (d.sections || []).length ? `${(d.sections || []).length} sections found, in order` : 'Sections mapped');
+      prog.done();
+      toast('PDF analysed — now choose your options below.');
+    } catch (err) { sstep('ps2', '', 'Extraction stopped'); prog.fail(err.message); if (st) st.textContent = ''; toast('Analyse failed: ' + err.message, true); }
+    busy(b, false, 'Analyse PDF');
+  });
+  // --- Pasted text ---
+  on('usetext', 'click', () => {
+    const text = $('srctext').value.trim();
+    if (text.length < 120) { toast('Paste a longer text first (at least a few paragraphs).', true); return; }
+    setSource({ type: 'text', text, title: '', durationSec: 0, chapters: [], ready: true });
+    toast('Text ready — now choose your options below.');
+  });
+  // --- Restore a source another student tool already analysed (handoff) ---
+  try {
+    const h = JSON.parse(localStorage.getItem(SRC_LS) || 'null');
+    if (h && h.type) {
+      if (h.type === 'youtube' && h.link) {
+        setSrcTab('yt');
+        if ($('srclink')) $('srclink').value = h.link;
+        SRC = { type: 'youtube', link: h.link, videoId: srcYtId(h.link), title: h.title || '', durationSec: h.durationSec || 0, chapters: h.chapters || [], ready: true };
+      } else if ((h.type === 'pdf' || h.type === 'text') && h.text) {
+        setSrcTab(h.type);
+        if (h.type === 'text' && $('srctext')) $('srctext').value = h.text;
+        SRC = { type: h.type, text: h.text, pdfName: h.pdfName || '', title: '', durationSec: 0, chapters: h.chapters || [], ready: true };
+      }
+      if (SRC) {
+        renderSrcSummary();
+        const note = $('srcnote');
+        if (note) { note.textContent = `Using your scanned lecture from ${SRC_FROM[h.from] || 'Student Mode'} — change source above if needed.`; note.classList.remove('hidden'); }
+      }
+    }
+  } catch { /* no handoff — fresh start */ }
+}
+
+/* ---------- Designed notes sheet: data-driven renderer + 6 themes ----------
+ * One anatomy, six looks (like the Pinterest study-notes references):
+ * centred title + one-line subtitle, numbered sections with pastel heading
+ * chips in rotation, short bullets, a "Key idea" box per section, formulas
+ * in their own bordered boxes, definitions in small boxes, an Examples box,
+ * an "Important" box for exam-critical points, and a bold Remember strip.
+ */
+const SHEET_THEMES = [
+  ['sticky', 'Sticky Notes'], ['notebook', 'Notebook Classic'], ['pastel', 'Pastel Laws'],
+  ['mint', 'Mint Fresh'], ['sky', 'Sky Minimal'], ['peach', 'Peach Warm'],
+];
+const SHEET_ROT_LS = 'sc_sheet_rot_v1';
+function sheetWatch(sec) {
+  if (!SRC || SRC.type !== 'youtube' || !SRC.videoId || sec == null) return '';
+  return `https://www.youtube.com/watch?v=${SRC.videoId}&t=${Math.max(0, Math.floor(sec))}s`;
+}
+function sheetHTML(d, theme) {
+  const secs = (d.sections || []).map((s, i) => {
+    const w = sheetWatch(s.startSec);
+    return `<div class="sheet-sec"><div class="sheet-sec-head"><span class="sheet-num">${i + 1}</span><span class="sheet-chip pc${i % 6}">${esc(s.heading || 'Section')}</span>${w ? `<a class="sheet-time" href="${w}" target="_blank" rel="noopener">▶ ${fmt(s.startSec)}</a>` : ''}</div>
+    ${s.body ? `<p class="body">${esc(s.body)}</p>` : ''}
+    ${(s.points || []).length ? `<ul>${s.points.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
+    ${s.keyIdea ? `<div class="sheet-key"><b>Key idea</b>${esc(s.keyIdea)}</div>` : ''}
+    ${(s.formulas || []).length ? `<div class="sheet-fmls">${s.formulas.map(f => `<span class="sheet-fml">${esc(f)}</span>`).join('')}</div>` : ''}
+    </div>`;
+  }).join('');
+  const allFormulas = [...(d.formulas || []), ...(d.sections || []).flatMap(s => s.formulas || [])];
+  return `<div class="sheet th-${theme}">
+  <div class="sheet-head"><div class="sheet-kicker">StreamClip AI · Study notes</div><h3>${esc(d.title || 'Lecture notes')}</h3>${d.subtitle ? `<p class="sheet-sub">${esc(d.subtitle)}</p>` : ''}</div>
+  <div class="sheet-body">${secs}
+  ${allFormulas.length ? `<h4 class="sheet-h">Formulas &amp; exact facts</h4><div class="sheet-fmls">${allFormulas.map(f => `<span class="sheet-fml">${esc(f)}</span>`).join('')}</div>` : ''}
+  ${(d.definitions || []).length ? `<h4 class="sheet-h">Key definitions</h4><div class="sheet-defs">${d.definitions.map(x => `<div class="sheet-def"><b>${esc(x.term)}</b><span>${esc(x.meaning)}</span></div>`).join('')}</div>` : ''}
+  ${(d.examples || []).length ? `<div class="sheet-box"><h5>Examples</h5><ul>${d.examples.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+  ${(d.important || []).length ? `<div class="sheet-box sheet-imp"><h5>Important — exam favourites</h5><ul>${d.important.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+  ${(d.questions || []).length ? `<div class="sheet-box"><h5>Likely exam questions</h5><ul>${d.questions.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+  ${(d.remember || []).length ? `<div class="sheet-take"><b>★ Remember</b><ul>${d.remember.map(r => `<li>${esc(r)}</li>`).join('')}</ul></div>` : ''}
+  </div></div>`;
+}
+function sheetMd(d) {
+  const L = [`# ${d.title || 'Lecture notes'}`, d.subtitle ? `\n${d.subtitle}` : ''];
+  (d.sections || []).forEach((s, i) => {
+    L.push(`\n## ${i + 1}. ${s.heading}${s.startSec != null && SRC && SRC.type === 'youtube' ? ` (${fmt(s.startSec)} — ${sheetWatch(s.startSec)})` : ''}`);
+    if (s.body) L.push(s.body);
+    (s.points || []).forEach(p => L.push(`- ${p}`));
+    if (s.keyIdea) L.push(`> Key idea: ${s.keyIdea}`);
+    (s.formulas || []).forEach(f => L.push(`- Formula: ${f}`));
+  });
+  const allF = [...(d.formulas || []), ...(d.sections || []).flatMap(s => s.formulas || [])];
+  if (allF.length) L.push(`\n## Formulas & exact facts\n${allF.map(f => `- ${f}`).join('\n')}`);
+  if ((d.definitions || []).length) L.push(`\n## Key definitions\n${d.definitions.map(x => `- **${x.term}**: ${x.meaning}`).join('\n')}`);
+  if ((d.examples || []).length) L.push(`\n## Examples\n${d.examples.map(x => `- ${x}`).join('\n')}`);
+  if ((d.important || []).length) L.push(`\n## Important — exam favourites\n${d.important.map(x => `- ${x}`).join('\n')}`);
+  if ((d.questions || []).length) L.push(`\n## Likely exam questions\n${d.questions.map(x => `- ${x}`).join('\n')}`);
+  if ((d.remember || []).length) L.push(`\n## Remember\n${d.remember.map(r => `- ${r}`).join('\n')}`);
+  return L.join('\n');
+}
+async function sheetToPng(sheetEl, name) {
+  if (!window.html2canvas) { toast('Image download could not run in this browser — use Print, then "Save as PDF", instead.', true); return; }
+  try {
+    toast('Making the picture — one moment…');
+    const cv = await window.html2canvas(sheetEl, { scale: 2, backgroundColor: '#f8f4e9', useCORS: true, logging: false });
+    const a = document.createElement('a'); a.download = `${name}.png`; a.href = cv.toDataURL('image/png'); a.click();
+    toast('Notes picture downloaded.');
+  } catch { toast('Image download failed in this browser — use Print, then "Save as PDF", instead.', true); }
+}
+function sheetPrint(sheetEl) {
+  document.querySelectorAll('.sheet.picked').forEach(s => s.classList.remove('picked'));
+  sheetEl.classList.add('picked');
+  document.body.classList.add('printmode');
+  const clean = () => { document.body.classList.remove('printmode'); sheetEl.classList.remove('picked'); window.removeEventListener('afterprint', clean); };
+  window.addEventListener('afterprint', clean);
+  setTimeout(clean, 60000);
+  window.print();
+}
+/** Mount a sheet (design switcher + sheet + actions) into a host element. */
+function mountSheet(host, data, baseName) {
+  if (!host) return;
+  host._data = data;
+  if (!host._design) host._design = 'auto';
+  if (host._design === 'auto') {
+    let n = 0; try { n = Number(localStorage.getItem(SHEET_ROT_LS) || 0) || 0; localStorage.setItem(SHEET_ROT_LS, String(n + 1)); } catch { /* ignore */ }
+    host._theme = SHEET_THEMES[n % SHEET_THEMES.length][0];
+  } else host._theme = host._design;
+  const paint = () => {
+    const sh = host.querySelector('.sheethost');
+    if (sh) sh.innerHTML = sheetHTML(host._data, host._theme);
+    host.querySelectorAll('[data-design]').forEach(c => c.classList.toggle('on', c.dataset.design === host._design));
+  };
+  host.innerHTML = `<div class="chips designchips"><span class="small dim" style="align-self:center"><b>Design:</b></span>
+    <button class="chip" data-design="auto">Auto</button>${SHEET_THEMES.map(([id, name]) => `<button class="chip" data-design="${id}">${name}</button>`).join('')}</div>
+    <div class="sheethost"></div>
+    <div class="btns three mt"><button class="btn sm" data-act="png">Download picture (PNG)</button><button class="btn dark sm" data-act="print">Print sheet</button><button class="btn dark sm" data-act="md">Download notes (.md)</button></div>`;
+  paint();
+  host.querySelectorAll('[data-design]').forEach(c => c.addEventListener('click', () => {
+    host._design = c.dataset.design;
+    if (host._design !== 'auto') host._theme = host._design;
+    else { let n = 0; try { n = Number(localStorage.getItem(SHEET_ROT_LS) || 0) || 0; } catch { /* ignore */ } host._theme = SHEET_THEMES[n % SHEET_THEMES.length][0]; }
+    paint();
+    toast(host._design === 'auto' ? 'Design: Auto — new notes rotate through all six looks.' : 'Design changed — same notes, new look. No new AI call was made.');
+  }));
+  const sheetEl = () => host.querySelector('.sheet');
+  host.querySelector('[data-act="png"]').addEventListener('click', () => sheetToPng(sheetEl(), baseName));
+  host.querySelector('[data-act="print"]').addEventListener('click', () => sheetPrint(sheetEl()));
+  host.querySelector('[data-act="md"]').addEventListener('click', () => download(`${baseName}.md`, sheetMd(host._data), 'text/markdown'));
+}
+/** One-page revision sheet data, from the prepared source. Shared by Notes + Exam Prep. */
+async function revisionSheetData(onRetry) {
+  const d = await sourceJson(`Compress the WHOLE attached lecture material into a ONE-PAGE revision sheet. Return JSON only: {"title":"...","subtitle":"one line that sums up the topic","sections":[{"heading":"...","startSec":0,"points":["..."],"body":"","keyIdea":"","formulas":["..."]}],"definitions":[{"term":"...","meaning":"..."}],"examples":["..."],"important":["..."],"remember":["..."]}
+Keep it to one page: at most 4 sections with at most 4 short points each, at most 6 definitions, at most 2 examples. Sections stay in the material's own order — never reshuffled. startSec: ${SRC && SRC.type === 'youtube' ? 'the second where the section begins in the video' : 'always null'}. Write in simple, easy words. Formulas, dates and exact facts go in "formulas" lists, never buried in points. "remember": 1-2 lines a student must not forget.`, { temperature: 0.4, onRetry });
+  if (!d || !Array.isArray(d.sections)) throw new Error('The AI reply could not be read. Try again.');
+  return d;
+}
+
 /* ---------- Hooks + Title Generator ---------- */
 if (tool === 'hooks') {
+  let toneVal = 'Exciting';
+  document.querySelectorAll('[data-tone]').forEach(c => c.addEventListener('click', () => { toneVal = c.dataset.tone; document.querySelectorAll('[data-tone]').forEach(x => x.classList.toggle('on', x === c)); }));
   on('go', 'click', async (e) => {
     if (!requireKey()) return;
     const topic = $('topic').value.trim();
@@ -79,7 +399,7 @@ if (tool === 'hooks') {
     const n = Number($('hcount').value);
     const b = e.currentTarget; busy(b, true);
     try {
-      const d = await geminiJson(`You are a viral short-form content strategist. Topic: "${topic}". Platform: ${$('platform').value}. Tone: ${$('tone').value}. Hook style: ${$('hstyle').value}. Language: ${$('hlang').value}.
+      const d = await geminiJson(`You are a viral short-form content strategist. Topic: "${topic}". Platform: ${$('platform').value}. Tone: ${toneVal}. Hook style: ${$('hstyle').value}. Language: ${$('hlang').value}.
 Return JSON only: {"hooks":["..."],"titles":["..."],"hashtags":["..."]}
 Give exactly ${n} hooks (3-7 punchy words each, all in the chosen hook style, no emojis), ${Math.max(4, n - 2)} titles (max 60 characters each), ${n} hashtags (no # symbol, single words or short phrases). Write hooks and titles in the chosen language.`, { onRetry: retryNote(b) });
       const hooks = d.hooks || [], titles = d.titles || [], tags = (d.hashtags || []).map(h => '#' + String(h).replace(/\s+/g, ''));
@@ -99,25 +419,49 @@ Give exactly ${n} hooks (3-7 punchy words each, all in the chosen hook style, no
 
 /* ---------- Caption Translation ---------- */
 if (tool === 'translate') {
+  let mkOn = false;
+  const mkSwitch = $('mktitle');
+  if (mkSwitch) mkSwitch.addEventListener('click', () => { mkOn = !mkOn; mkSwitch.classList.toggle('on', mkOn); });
+  const SRT_STYLE = {
+    'Clean full lines': 'Keep each caption line whole and natural.',
+    'Short lines — max 7 words': 'Break the translation into SHORT caption lines of at most 7 words each, keeping every timestamp attached to its first line.',
+    'Word-by-word (karaoke)': 'Output the translation word by word — one word per line in reading order — keeping each timestamp at the start of its phrase.',
+  };
   on('go', 'click', async (e) => {
     if (!requireKey()) return;
     const text = $('src').value.trim();
     if (!text) { toast('Paste your captions first.', true); return; }
     const b = e.currentTarget; busy(b, true);
     const st = $('tstatus');
+    let mkText = '';
     try {
       const chunks = chunkText(text, 4500);
       const parts = [];
       for (let i = 0; i < chunks.length; i++) {
         if (st) st.textContent = chunks.length > 1 ? `Translating part ${i + 1} of ${chunks.length}…` : 'Translating…';
-        parts.push(await geminiText(`Translate these video captions from ${$('sfrom').value} into ${$('lang').value}. Style: ${$('tstyle').value}. Keep every line break and every timestamp exactly as it is. Translate only the spoken words. Do not add explanations, do not wrap in code fences.\n\n${chunks[i]}`, { temperature: 0.3, onRetry: retryNote(b, st) }));
+        parts.push(await geminiText(`Translate these video captions from ${$('sfrom').value} into ${$('lang').value}. Style: ${$('tstyle').value}. Caption formatting: ${SRT_STYLE[$('srtstyle').value] || SRT_STYLE['Clean full lines']} Keep every timestamp exactly as it is. Translate only the spoken words. Do not add explanations, do not wrap in code fences.\n\n${chunks[i]}`, { temperature: 0.3, onRetry: retryNote(b, st) }));
       }
       const r = parts.join('\n\n');
+      const styleName = $('srtstyle').value;
+      const lineCount = r.split('\n').filter(l => l.trim()).length;
+      const note = `Companion note — captions translated to ${$('lang').value} in "${styleName}" style (${lineCount} lines, from ${$('sfrom').value}). Keep this note with the .srt file so you remember which style and language it uses.`;
+      let mkHtml = '';
+      if (mkOn) {
+        if (st) st.textContent = 'Writing the title + description…';
+        try {
+          mkText = await geminiText(`Write a YouTube title (max 70 characters) and a 2-3 line description in ${$('lang').value} for a video whose captions begin like this:\n${text.slice(0, 1500)}\nReturn exactly in this shape:\nTITLE: ...\nDESCRIPTION: ...`, { temperature: 0.6, onRetry: retryNote(b, st) });
+          mkHtml = `<div class="outcard"><b>Title + description (${esc($('lang').value)})</b><p class="out mt">${esc(mkText)}</p><button class="btn dark sm mt" id="copymk">Copy title + description</button></div>`;
+        } catch { mkHtml = '<div class="outcard"><b>Title + description</b><p class="small dim mt">That extra step did not answer — your translation above is complete without it.</p></div>'; }
+      }
       if (st) st.textContent = 'Done — translation ready below.';
       out('result', `<div class="outcard"><div class="spread"><b>Translated captions (${esc($('lang').value)})</b><span class="tag y">${chunks.length} part${chunks.length > 1 ? 's' : ''}</span></div><p class="out mt">${esc(r)}</p>
-        <div class="btns two mt"><button class="btn dark sm" id="copytr">Copy translation</button><button class="btn sm" id="dltr">Download (.srt)</button></div></div>`);
+        <div class="btns two mt"><button class="btn dark sm" id="copytr">Copy translation</button><button class="btn sm" id="dltr">Download (.srt)</button></div></div>
+        <div class="outcard"><b>Companion note</b><p class="small dim mt">${esc(note)}</p><button class="chip mt" id="copynote">Copy note</button></div>
+        ${mkHtml}`);
       on('copytr', 'click', () => copyText(r, 'Translation copied.'));
-      on('dltr', 'click', () => download('translated-captions.srt', r, 'text/plain'));
+      on('copynote', 'click', () => copyText(note, 'Note copied.'));
+      if (mkText) on('copymk', 'click', () => copyText(mkText, 'Title + description copied.'));
+      on('dltr', 'click', () => download(`translated-captions-${styleName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}.srt`, r, 'text/plain'));
     } catch (err) { toast(err.message, true); if (st) st.textContent = ''; }
     busy(b, false, 'Translate captions');
   });
@@ -125,27 +469,92 @@ if (tool === 'translate') {
 
 /* ---------- Lecture to Notes ---------- */
 if (tool === 'notes') {
-  on('go', 'click', async (e) => {
-    if (!requireKey()) return;
-    const text = $('src').value.trim();
-    if (text.length < 80) { toast('Paste a longer lecture transcript (at least a few paragraphs).', true); return; }
-    const b = e.currentTarget; busy(b, true);
+  let easyOn = true; // "Explain in easy language" — default ON (user's emphasis)
+  const easyEl = $('neasy');
+  if (easyEl) easyEl.addEventListener('click', () => { easyOn = !easyOn; easyEl.classList.toggle('on', easyOn); });
+  const LEN_GUIDE = {
+    'Short revision': 'Keep it tight: at most 6 sections, 3-4 short points each — only what a student revises the night before.',
+    'Full notes': 'Cover the whole lecture properly: every main topic becomes a section, 4-7 points each.',
+    'Detailed chapter-wise': 'Be exhaustive: one section per chapter/topic, 6-10 points each, with sub-details and the reasoning, not just conclusions.',
+  };
+  const STYLE_GUIDE = {
+    'Bullet points': 'Write every section as short bullet "points"; leave "body" empty.',
+    'Headings + paragraphs': 'Write each section mainly as a short flowing paragraph in "body", plus at most 3 "points" carrying the sharpest facts.',
+    'Exam-focused': 'Weight everything toward the exam: phrase points as answers to likely questions, put traps and examiner favourites in "important", and also return "questions": the likely exam questions from this material.',
+  };
+  async function notesData({ easy, lang, len, style }, onRetry) {
+    const isYt = SRC && SRC.type === 'youtube';
+    const prompt = `You are a study-notes writer making designed notes from the attached lecture material.
+Return JSON only: {"title":"...","subtitle":"one line that sums up the whole topic","sections":[{"heading":"...","startSec":0,"points":["..."],"body":"","keyIdea":"","formulas":["..."]}],"definitions":[{"term":"...","meaning":"..."}],"examples":["..."],"important":["..."],"remember":["..."]}
+ORDER RULE (important): the sections MUST follow the exact order the material teaches the topics — the same sequence from start to finish. Never reshuffle, group or reorder topics.
+${isYt ? 'startSec: the second (from the video start) where that section of the lecture begins.' : 'startSec: always null — use the material\'s own section headings as the section headings.'}
+LENGTH: ${LEN_GUIDE[len] || LEN_GUIDE['Full notes']}
+STYLE: ${STYLE_GUIDE[style] || STYLE_GUIDE['Bullet points']}
+${easy ? 'EASY LANGUAGE (important): explain everything in very simple, easy words — short sentences and everyday examples — so even a weak student understands every point word by word. Avoid hard words; when a technical term is needed, explain it in simple words in brackets right there.' : ''}
+LANGUAGE: write all the notes in ${lang}. Keep technical terms in English.
+keyIdea: fill it only when the section has ONE clear takeaway a student must not miss; otherwise "".
+formulas: every formula, equation, date or exact fact belongs in a "formulas" list (shown in boxes), never buried inside points.
+examples: only real examples that are IN the material — never invent new ones; [] if the material has none.
+important: exam-critical points, likely-question areas and traps from the material; [] if none stand out.
+remember: 1-2 short lines — the must-not-forget summary of the whole lecture.
+definitions: the key terms, each with a one-line meaning in the notes language.`;
     try {
-      const d = await geminiJson(`You are a study-notes writer. Detail level: ${$('nlevel').value}. Write the notes in: ${$('nlang').value}. From this lecture transcript, make clean revision notes.
+      const d = await sourceJson(prompt, { temperature: 0.45, onRetry });
+      if (!d || !Array.isArray(d.sections) || !d.sections.length) throw new Error('bad shape');
+      return d;
+    } catch {
+      // Graceful fallback: the older, simpler notes schema, mapped onto the sheet.
+      const d = await sourceJson(`You are a study-notes writer. From the attached lecture material, make clean revision notes. Write in ${lang}.${easy ? ' Use very simple, easy words throughout.' : ''}
 Return JSON only: {"title":"...","summary":"...","keyPoints":["..."],"definitions":[{"term":"...","meaning":"..."}],"formulas":["..."],"examTraps":["..."],"remember":["..."]}
-Keep points short and exact to the transcript. Transcript:\n${text.slice(0, 30000)}`, { onRetry: retryNote(b) });
-      const md = `# ${d.title}\n\n## Summary\n${d.summary}\n\n## Key points\n${(d.keyPoints || []).map(p => '- ' + p).join('\n')}\n\n## Definitions\n${(d.definitions || []).map(x => `- **${x.term}**: ${x.meaning}`).join('\n')}\n\n## Formulas & facts\n${(d.formulas || []).map(f => '- ' + f).join('\n')}\n\n## Exam traps\n${(d.examTraps || []).map(f => '- ' + f).join('\n')}\n\n## Remember\n${(d.remember || []).map(r => '- ' + r).join('\n')}`;
-      out('result', `<div class="outcard"><h3>${esc(d.title || 'Lecture notes')}</h3>
-        <p class="out mt"><b>Summary:</b> ${esc(d.summary || '')}</p>
-        <b class="mt" style="display:block">Key points</b><ul>${(d.keyPoints || []).map(p => `<li>${esc(p)}</li>`).join('')}</ul>
-        ${(d.definitions || []).length ? `<b style="display:block" class="mt">Definitions</b><ul>${d.definitions.map(x => `<li><b>${esc(x.term)}:</b> ${esc(x.meaning)}</li>`).join('')}</ul>` : ''}
-        ${(d.formulas || []).length ? `<b style="display:block" class="mt">Formulas & facts</b><ul>${d.formulas.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
-        ${(d.examTraps || []).length ? `<b style="display:block" class="mt">Exam traps</b><ul>${d.examTraps.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
-        <div class="btns two mt"><button class="btn sm" id="dln">Download notes (.md)</button><button class="btn dark sm" id="cpn">Copy notes</button></div></div>`);
-      on('dln', 'click', () => download('lecture-notes.md', md, 'text/markdown'));
-      on('cpn', 'click', () => copyText(md, 'Notes copied.'));
-    } catch (err) { toast(err.message, true); }
-    busy(b, false, 'Make my notes');
+Keep points short and exact to the material, in the material's own order.`, { temperature: 0.45, onRetry });
+      return {
+        title: d.title || 'Lecture notes', subtitle: d.summary || '',
+        sections: [{ heading: 'Key points', startSec: null, points: d.keyPoints || [], body: '', keyIdea: '', formulas: [] }],
+        definitions: d.definitions || [], formulas: d.formulas || [], examples: [],
+        important: d.examTraps || [], remember: d.remember || [],
+      };
+    }
+  }
+  async function makeNotes(overrides, btn) {
+    if (!requireKey() || !requireSource()) return;
+    const opts = {
+      easy: overrides.easy != null ? overrides.easy : easyOn,
+      lang: overrides.lang || $('nlang').value,
+      len: $('nlen').value,
+      style: $('nstyle').value,
+    };
+    busy(btn, true);
+    const prog = makeProgress($('prog'), ['Reading the source', 'Analysing the lecture', 'Writing your notes', 'Designing the sheet', 'Ready']);
+    prog.setStep(1);
+    try {
+      const d = await notesData(opts, retryNote(btn));
+      prog.setStep(3);
+      mountSheet($('result'), d, 'lecture-notes');
+      const host = $('result');
+      const extra = document.createElement('div');
+      extra.innerHTML = `<div class="btns two mt"><label class="field"><span>Explain language</span><select class="input" id="explang"><option>English</option><option>Urdu</option><option>Hindi</option></select><span class="small dim">For the simple-words version.</span></label>
+      <div class="field"><span>&nbsp;</span><button class="btn dark block" id="explain">Explain in simple words</button><span class="small dim">Regenerates these notes in easy language.</span></div></div>`;
+      host.appendChild(extra);
+      on('explain', 'click', (ev) => makeNotes({ easy: true, lang: $('explang').value }, ev.currentTarget));
+      prog.done();
+      toast('Notes ready — pick a design above the sheet, or download the picture.');
+    } catch (err) { prog.fail(err.message); toast('Notes failed: ' + err.message, true); }
+    busy(btn, false, 'Make my notes');
+  }
+  on('go', 'click', (e) => makeNotes({}, e.currentTarget));
+  on('sheetgo', 'click', async (e) => {
+    if (!requireKey() || !requireSource()) return;
+    const b = e.currentTarget; busy(b, true);
+    const prog = makeProgress($('prog'), ['Reading the source', 'Writing the sheet', 'Designing the sheet', 'Ready']);
+    prog.setStep(1);
+    try {
+      const d = await revisionSheetData(retryNote(b));
+      prog.setStep(2);
+      mountSheet($('sheetresult'), d, 'revision-sheet');
+      prog.done();
+      toast('Revision sheet ready — one page, everything that matters.');
+    } catch (err) { prog.fail(err.message); toast('Revision sheet failed: ' + err.message, true); }
+    busy(b, false, 'Make my revision sheet');
   });
 }
 
@@ -153,15 +562,15 @@ Keep points short and exact to the transcript. Transcript:\n${text.slice(0, 3000
 if (tool === 'flashcards') {
   let cards = [], ci = 0, flipped = false, quizData = [], answered = 0, score = 0;
   on('go', 'click', async (e) => {
-    if (!requireKey()) return;
-    const text = $('src').value.trim();
-    if (text.length < 80) { toast('Paste more study text first.', true); return; }
+    if (!requireKey() || !requireSource()) return;
     const b = e.currentTarget; busy(b, true);
+    const prog = makeProgress($('prog'), ['Reading your material', 'Making flashcards', 'Making the quiz', 'Ready']);
+    prog.setStep(1);
     try {
       const nc = Number($('fccount').value), nq = Number($('fqcount').value);
-      const d = await geminiJson(`Make study material from this text. Difficulty: ${$('fdiff').value}. Return JSON only:
+      const d = await sourceJson(`Make study material from the attached lecture material ONLY. Difficulty: ${$('fdiff').value}. Return JSON only:
 {"flashcards":[{"front":"question or term","back":"answer"}],"quiz":[{"q":"...","options":["a","b","c","d"],"answer":0,"why":"one line"}]}
-Exactly ${nc} flashcards and ${nq} quiz questions. Exact to the text.\n${text.slice(0, 30000)}`, { onRetry: retryNote(b) });
+Exactly ${nc} flashcards and ${nq} quiz questions. Stay exact to the material — invent nothing.`, { temperature: 0.5, onRetry: retryNote(b) });
       cards = d.flashcards || []; quizData = d.quiz || []; ci = 0; flipped = false; answered = 0; score = 0;
       out('result', `${cards.length ? `<h3 class="mt2">Flashcards — tap a card to flip</h3><div class="flashcard" id="fc"></div>
         <div class="btns three mt"><button class="btn dark" id="prev">Previous</button><button class="btn dark" id="shuf">Shuffle</button><button class="btn dark" id="next">Next</button></div>
@@ -194,7 +603,8 @@ Exactly ${nc} flashcards and ${nq} quiz questions. Exact to the text.\n${text.sl
         const sc = $('qscore'); if (sc) sc.textContent = `${score} / ${quizData.length}`;
         if (answered === quizData.length) { const f = $('qfinal'); if (f) f.textContent = `Quiz finished — you scored ${score} out of ${quizData.length} (${Math.round(score / quizData.length * 100)}%). ${score === quizData.length ? 'Perfect — exam ready.' : 'Review the red ones above, then regenerate for a fresh round.'}`; }
       }));
-    } catch (err) { toast(err.message, true); }
+      prog.done();
+    } catch (err) { prog.fail(err.message); toast(err.message, true); }
     busy(b, false, 'Make flashcards & quiz');
   });
 }
@@ -204,23 +614,125 @@ if (tool === 'presentation') {
   // Populate the Gemini voice picker.
   const vsel = $('pvoice');
   if (vsel) vsel.innerHTML = GEMINI_VOICES.map(v => `<option${v === 'Kore' ? ' selected' : ''}>${v}</option>`).join('');
+  /* ----- Optional professor's Reference PDF -----
+   * The student uploads the reference PDF their professor gave them; Gemini
+   * extracts it (same inlineData path as the other student tools) and lists
+   * its topics on the page FIRST, so the student sees what will be covered.
+   * When present, the PDF leads the slide plan (the typed topic still leads
+   * as the subject; empty topic = subject taken from the PDF). */
+  let refFile = null, refPdf = null; // refPdf: {text, topics[]}
+  on('refpdf', 'change', (e) => {
+    refFile = e.target.files?.[0] || null;
+    refPdf = null;
+    out('reftopics', '');
+    const st = $('refstatus');
+    if (st) st.textContent = refFile ? `Selected: ${refFile.name} (${(refFile.size / 1048576).toFixed(1)} MB) — tap "Read reference PDF".` : '';
+  });
+  on('refread', 'click', async (e) => {
+    if (!requireKey()) return;
+    if (!refFile) { toast('Choose the reference PDF first.', true); return; }
+    if (refFile.size > 18 * 1024 * 1024) { toast('This PDF is over ~18 MB — too big to send to Gemini from the browser. Use a smaller copy.', true); return; }
+    const b = e.currentTarget; busy(b, true);
+    const prog = makeProgress($('prog'), ['Reading the PDF', 'Listing the topics', 'Ready']);
+    const st = $('refstatus');
+    try {
+      if (st) st.textContent = 'Reading your reference PDF…';
+      prog.setStep(1);
+      const part = await fileToInline(refFile); // PDF goes to Google as an inlineData part
+      const d = await geminiPartsJson([part, { text: `Read this reference PDF a professor gave a student for a presentation. Return JSON only: {"text":"...","topics":["..."]}
+text: the FULL text of the document in reading order — do not summarise or shorten it; keep headings on their own lines. topics: the document's topics/structure as a short list (up to 12), in the document's own order, each one line.` }], { temperature: 0.2, timeoutMs: 240000, onRetry: retryNote(b, st) });
+      const text = String(d.text || '').trim();
+      if (text.length < 80) throw new Error('No readable text came out of this PDF.');
+      refPdf = { text, topics: (d.topics || []).map(t => String(t)).filter(Boolean) };
+      if (st) st.textContent = 'Reference PDF read — its topics are below. Now plan your presentation.';
+      out('reftopics', `<div class="outcard"><b>Topics found in your PDF</b>${refPdf.topics.length ? `<ul class="mt">${refPdf.topics.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : '<p class="small dim mt">No clear topic list came back, but the full text was read and will still guide the slides.</p>'}<p class="small dim mt">Your slides will follow these topics, in this order.</p></div>`);
+      prog.done();
+      toast('Reference PDF read — topics listed below.');
+    } catch (err) { prog.fail(err.message); if (st) st.textContent = ''; toast('Reference PDF failed: ' + err.message, true); }
+    busy(b, false, 'Read reference PDF');
+  });
+  /* ----- Deck downloads: genuine .pptx + print-route PDF -----
+   * The final deck (whichever source built it) is kept in `deck`.
+   * PPTX is a real PowerPoint file built in the browser with PptxGenJS.
+   * PDF uses a print-optimised slide view (one slide per page) instead of
+   * jsPDF, whose built-in fonts cannot render Urdu/Hindi text — the
+   * browser's own "Save as PDF" renders every language correctly. */
+  let deck = null;
+  async function downloadPptx() {
+    const errEl = $('dlerr');
+    const libFail = () => { if (errEl) { errEl.textContent = 'The download library couldn\'t load — check your connection and reload the page, then try again.'; errEl.classList.remove('hidden'); } };
+    if (!window.PptxGenJS) { libFail(); return; }
+    if (!deck) return;
+    try {
+      const pptx = new window.PptxGenJS();
+      pptx.defineLayout({ name: 'W16x9', width: 13.33, height: 7.5 });
+      pptx.layout = 'W16x9';
+      const RECT = (pptx.shapes && pptx.shapes.RECTANGLE) || 'rect';
+      const DARK = '12100C', YEL = 'FFC81F', WHITE = 'FFFFFF', DIMC = 'CFC8B8';
+      const t = pptx.addSlide(); t.background = { color: DARK };
+      t.addShape(RECT, { x: 0.7, y: 2.15, w: 1.1, h: 0.12, fill: { color: YEL } });
+      t.addText(deck.title || 'Presentation', { x: 0.7, y: 2.45, w: 11.9, h: 1.9, fontSize: 40, bold: true, color: WHITE, fontFace: 'Arial' });
+      if (deck.topic && deck.topic !== deck.title) t.addText(deck.topic, { x: 0.7, y: 4.45, w: 11.9, h: 0.6, fontSize: 18, color: YEL, fontFace: 'Arial' });
+      t.addText('Made with StreamClip AI', { x: 0.7, y: 6.75, w: 11.9, h: 0.4, fontSize: 12, color: DIMC, fontFace: 'Arial' });
+      for (const s of deck.slides) {
+        const sl = pptx.addSlide(); sl.background = { color: DARK };
+        sl.addShape(RECT, { x: 0, y: 0, w: 13.33, h: 0.14, fill: { color: YEL } });
+        sl.addText(s.title || '', { x: 0.7, y: 0.55, w: 11.9, h: 1.0, fontSize: 30, bold: true, color: WHITE, fontFace: 'Arial' });
+        sl.addText((s.bullets || []).map(bt => ({ text: String(bt), options: { bullet: true, breakLine: true } })), { x: 0.7, y: 1.8, w: 11.9, h: 4.6, fontSize: 19, color: WHITE, fontFace: 'Arial', lineSpacingMultiple: 1.25 });
+        if (s.narration) sl.addNotes(String(s.narration));
+      }
+      const fname = (deck.title || 'presentation').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'presentation';
+      await pptx.writeFile({ fileName: `${fname}.pptx` });
+      toast('PPT downloaded — your narration is in each slide\'s speaker notes.');
+    } catch (err) { toast('PPT failed: ' + err.message, true); }
+  }
+  function downloadPdf() {
+    if (!deck) return;
+    document.querySelectorAll('.deckprint').forEach(x => x.remove());
+    const host = document.createElement('div'); host.className = 'deckprint';
+    host.innerHTML = `<div class="pslide title"><div class="bar"></div><h2>${esc(deck.title || 'Presentation')}</h2><p>${esc(deck.topic || '')}</p></div>`
+      + deck.slides.map(s => `<div class="pslide"><div class="bar"></div><h2>${esc(s.title || '')}</h2><ul>${(s.bullets || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul><p class="narr"><b>Speaker notes:</b> ${esc(s.narration || '')}</p></div>`).join('');
+    document.body.appendChild(host);
+    document.body.classList.add('printdeck');
+    const clean = () => { document.body.classList.remove('printdeck'); window.removeEventListener('afterprint', clean); };
+    window.addEventListener('afterprint', clean);
+    setTimeout(clean, 60000);
+    toast('In the print window, choose "Save as PDF" — one slide per page.');
+    window.print();
+  }
   on('go', 'click', async (e) => {
     if (!requireKey()) return;
     const topic = $('topic').value.trim();
-    if (!topic) { toast('Write your presentation topic first.', true); return; }
+    const fromSrc = srcReady();
+    if (!refPdf && !fromSrc && !topic) { toast('Add a lecture source in Step 1, read a reference PDF, or write your presentation topic.', true); return; }
     const b = e.currentTarget; busy(b, true);
+    const prog = makeProgress($('prog'), ['Reading your material', 'Writing the script', 'Building the slides', 'Ready']);
+    prog.setStep(1);
     try {
-      const d = await geminiJson(`Plan a student class-presentation video. Topic: "${topic}". Extra points from the student: "${$('points').value.trim()}". Slides: ${$('slides').value}. Audience level: ${$('level').value}. Narration language: ${$('plang').value}. Speaking tone: ${$('ptone').value}.
+      const shape = `Slides: ${$('slides').value}. Audience level: ${$('level').value}. Narration language: ${$('plang').value}. Speaking tone: ${$('ptone').value}.
 Return JSON only: {"title":"...","slides":[{"title":"...","bullets":["..."],"narration":"..."}]}
-Narration per slide: 2-4 natural spoken sentences in the chosen language and tone, written to be read aloud by an AI voice. No greetings on every slide.`, { onRetry: retryNote(b) });
+Narration per slide: 2-4 natural spoken sentences in the chosen language and tone, written to be read aloud by an AI voice. No greetings on every slide.`;
+      const d = refPdf
+        ? await geminiJson(`Plan a student class-presentation video. The student has a professor's REFERENCE PDF — its content is below. ${topic ? `The presentation subject, as typed by the student, is: "${topic}" — lead with it as the subject.` : 'The student typed no topic — take the presentation subject from the PDF itself.'} Build the slides following the PDF's topics and structure, in its own order, and use its tips and content. Points the student must cover: "${$('points').value.trim()}". ${shape}\n\n--- REFERENCE PDF CONTENT ---\n${refPdf.text.slice(0, 60000)}`, { temperature: 0.55, onRetry: retryNote(b) })
+        : fromSrc
+          ? await sourceJson(`Plan a student class-presentation video from the attached lecture material.${topic ? ` Focus the presentation on: "${topic}".` : ''} Points the student must cover: "${$('points').value.trim()}". Build the slides from the material itself, in the material's own order. ${shape}`, { temperature: 0.55, onRetry: retryNote(b) })
+          : await geminiJson(`Plan a student class-presentation video. Topic: "${topic}". Extra points from the student: "${$('points').value.trim()}". ${shape}`, { onRetry: retryNote(b) });
+      deck = { title: d.title || topic, topic, quality: $('pquality') ? $('pquality').value : '1080p', slides: d.slides || [] };
       const script = (d.slides || []).map((s, i) => `SLIDE ${i + 1}: ${s.title}\n${s.narration}`).join('\n\n');
+      prog.setStep(2);
       out('result', `<div class="outcard"><h3>${esc(d.title || topic)}</h3><p class="small dim mt">Voice for playback: <b>${esc(vsel ? vsel.value : 'Kore')}</b> (change it above and re-play any slide). Play uses Gemini's AI voice on your key.</p></div>
         ${(d.slides || []).map((s, i) => `<div class="outcard slidecard"><b>Slide ${i + 1} — ${esc(s.title)}</b>
           <ul>${(s.bullets || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
           <p class="small dim mt"><b>Voice script:</b> ${esc(s.narration)}</p>
           <div class="btns two mt"><button class="btn sm" data-tts="${i}">▶ Play AI voice</button><button class="btn dark sm" data-dla="${i}">Download voice (.wav)</button></div>
           <div id="aud-${i}" class="mt"></div></div>`).join('')}
+        <div class="outcard"><b>Download your presentation</b>
+          <p class="small dim mt">The real files students submit: a PowerPoint with your narration in each slide's speaker notes, and a PDF with one slide per page. Deck quality: <b>${esc(deck.quality)}</b> — applied to video exports of this deck.</p>
+          <div class="btns two mt"><button class="btn sm" id="dlpptx">Download PPT (.pptx)</button><button class="btn dark sm" id="dlpdf">Download PDF</button></div>
+          <p class="small dim mt hidden" id="dlerr"></p></div>
         <button class="btn sm mt" id="dls">Download voice script (.txt)</button>`);
+      on('dlpptx', 'click', downloadPptx);
+      on('dlpdf', 'click', downloadPdf);
       on('dls', 'click', () => download('presentation-script.txt', `${d.title || topic}\n\n${script}`, 'text/plain'));
       const speak = async (i, dl) => {
         const s = (d.slides || [])[i]; if (!s) return;
@@ -234,7 +746,8 @@ Narration per slide: 2-4 natural spoken sentences in the chosen language and ton
       };
       document.querySelectorAll('[data-tts]').forEach(x => x.addEventListener('click', () => speak(Number(x.dataset.tts), false)));
       document.querySelectorAll('[data-dla]').forEach(x => x.addEventListener('click', () => speak(Number(x.dataset.dla), true)));
-    } catch (err) { toast(err.message, true); }
+      prog.done();
+    } catch (err) { prog.fail(err.message); toast(err.message, true); }
     busy(b, false, 'Plan my presentation');
   });
 }
@@ -278,6 +791,7 @@ if (tool === 'thumbnail') {
       const d = await geminiPartsJson([part, { text: `Analyse this YouTube thumbnail like a top thumbnail designer. Return JSON only:
 {"topic":"what the video is about","textOnThumbnail":"the EXACT text written on the thumbnail, word for word","subject":"the main subject/face/object","works":["what works, short"],"weak":["what is weak, short"],"directions":["4 redesign directions that look completely different from each other but keep the SAME text"]}` }], { temperature: 0.4, onRetry: retryNote(b) });
       analysis = d;
+      for (const k of Object.keys(briefCache)) delete briefCache[k]; // new analysis — old designer briefs no longer apply
       analysisText = d.textOnThumbnail || '';
       if (analysisText && !$('ttext').value.trim()) $('ttext').value = analysisText;
       out('aresult', `<div class="outcard"><b>Analysis</b>
@@ -332,12 +846,41 @@ Art direction: ${st.dir}.${extra ? ` Creative direction: ${extra}.` : ''}
 The thumbnail must show this EXACT text, word for word, spelled exactly, in huge bold letters that dominate the design: "${text}"
 High contrast, dramatic, instantly readable at small size, professional YouTube thumbnail style, no watermark.`;
   };
+  // Designer briefs: before any image is generated, a text call writes a
+  // proper graphic-designer brief for that version (scene, subject, palette,
+  // composition, text placement + hierarchy) from the stored analysis, and
+  // the image model then designs to the brief. Briefs are cached per style
+  // (+ text + topic) so regenerating versions does not redo them.
+  const briefCache = {};
+  async function designerBrief(st, i, text) {
+    const extra = (analysis?.directions || [])[i] || '';
+    const key = `${i}|${text}|${analysis?.topic || ''}|${extra}`;
+    if (briefCache[key]) return briefCache[key];
+    const brief = await geminiText(`You are a senior graphic designer. Write a short DESIGNER BRIEF (5-7 lines, plain text, no headings, no bullet points) for ONE version of a YouTube thumbnail. Cover exactly: the scene/background, the main visual subject and how it is shown, the colour palette (name 3-4 colours), the composition/layout, and where the big text sits with its hierarchy (which words are biggest).
+Video topic: ${analysis?.topic || 'not specified'}
+Main subject: ${analysis?.subject || 'the topic itself'}
+Exact text that will appear on the thumbnail: "${text}"
+Art direction for this version: ${st.dir}${extra ? `\nCreative direction: ${extra}` : ''}
+The design must be a completely new, original composition — never a copy of any existing thumbnail's layout.`, { temperature: 0.7 });
+    if (brief) briefCache[key] = brief;
+    return brief;
+  }
+  async function versionPrompt(st, i, text) {
+    try {
+      const brief = await designerBrief(st, i, text);
+      if (!brief) throw new Error('empty brief');
+      return `Design this YouTube thumbnail exactly to the following designer brief:\n${brief}\n\nThe thumbnail must show this EXACT text, word for word, spelled exactly, in huge bold letters that dominate the design: "${text}"\nProfessional YouTube thumbnail designed by a graphic designer — bold, high contrast, instantly readable at small size, full-frame original artwork edge to edge, no watermark.`;
+    } catch {
+      return redesignPrompt(st, i, text); // the brief is an enhancement — never block generation
+    }
+  }
   on('makevars', 'click', async (e) => {
     if (!requireKey()) return;
     const text = $('ttext').value.trim();
     if (!text) { toast('Write the thumbnail text first (analyse fills it automatically).', true); return; }
     const b = e.currentTarget; busy(b, true);
     const host = $('vars'); host.innerHTML = '';
+    const prog = makeProgress($('varprog'), ['Writing designer briefs', 'Creating the versions', 'Ready']);
     const [W, H] = RATIOS[ratio];
     let made = 0, designed = 0;
     try {
@@ -351,7 +894,15 @@ High contrast, dramatic, instantly readable at small size, professional YouTube 
         try {
           // Text-only generation: the uploaded thumbnail is NOT passed to the
           // image model — the new design comes from the analysis alone.
-          const url = await geminiImage(redesignPrompt(st, i, text), null, modelRatio(), { onRetry: retryNote(b) });
+          // First a designer brief is written for this version (cached), so
+          // the image model designs like a graphic designer, not a guesser.
+          const stline = card.querySelector('.stline');
+          if (stline) stline.textContent = 'Writing the designer brief…';
+          if (i === 0) prog.setStep(0);
+          const prompt = await versionPrompt(st, i, text);
+          prog.setStep(1, `Creating version ${i + 1} of ${varStyles.length}`);
+          if (stline) stline.textContent = 'Creating a brand-new design…';
+          const url = await geminiImage(prompt, null, modelRatio(), { onRetry: retryNote(b) });
           const img = await loadImg(url);
           cv.width = W; cv.height = H;
           const x = cv.getContext('2d');
@@ -370,7 +921,9 @@ High contrast, dramatic, instantly readable at small size, professional YouTube 
         const dl = document.createElement('button'); dl.className = 'btn sm mt'; dl.textContent = 'Download this version';
         dl.addEventListener('click', () => { const a = document.createElement('a'); a.download = `thumbnail-${ratio.replace(':', 'x')}-v${i + 1}.png`; a.href = cv.toDataURL('image/png'); a.click(); });
         card.appendChild(dl);
+        prog.setFraction((i + 1) / varStyles.length);
       }
+      prog.done();
     } finally {
       busy(b, false, 'Generate different versions');
     }
@@ -378,46 +931,127 @@ High contrast, dramatic, instantly readable at small size, professional YouTube 
       ? '6 brand-new versions made — same text on all, in ' + ratio + '.'
       : `${made} new AI versions + ${designed} designed versions made — same text on all, in ${ratio}.`);
   });
-  // Creator: AI background + your headline text design, composed at exact ratio size.
+  // Creator options: every chip below feeds the design prompt and/or the
+  // canvas composition — text style changes how the headline is drawn,
+  // scheme changes palette + fallback gradient + glow colour, background
+  // style changes the art direction (game = real blur on the artwork),
+  // subject directs the main visual, versions makes that many variants.
+  let cTStyle = 'outline', cScheme = 'auto', cBg = 'auto', cSubject = 'auto', cVers = 1;
+  const wireOpt = (boxId, attr, fn) => { const box = $(boxId); if (!box) return; box.querySelectorAll(`[data-${attr}]`).forEach(c => c.addEventListener('click', () => { box.querySelectorAll(`[data-${attr}]`).forEach(x => x.classList.toggle('on', x === c)); fn(c.dataset[attr]); })); };
+  wireOpt('rg-tstyle', 'tstyle', v => cTStyle = v);
+  wireOpt('rg-scheme', 'scheme', v => cScheme = v);
+  wireOpt('rg-bgstyle', 'bgstyle', v => cBg = v);
+  wireOpt('rg-subject', 'subject', v => cSubject = v);
+  wireOpt('rg-vers', 'vers', v => cVers = Number(v));
+  const SCHEMES = {
+    auto: { name: 'Auto', grad: ['#23307a', '#0b1026'], glow: '#ffe46b', palette: 'colours that fit the topic best' },
+    yellow: { name: 'Yellow-black', grad: ['#3a2f00', '#100c00'], glow: '#ffd94d', palette: 'electric yellow and black' },
+    red: { name: 'Red-black', grad: ['#3d0a0a', '#120303'], glow: '#ff5b4f', palette: 'bold red and black' },
+    blue: { name: 'Blue-white', grad: ['#0d2b4d', '#050f1d'], glow: '#4aa8ff', palette: 'clean blue and white' },
+    green: { name: 'Green', grad: ['#07301c', '#03130a'], glow: '#35d685', palette: 'fresh green tones' },
+    purple: { name: 'Purple', grad: ['#2c0a4d', '#10031f'], glow: '#b98cff', palette: 'rich purple tones' },
+  };
+  const BG_PHRASE = { auto: '', game: 'Background: a game scene with strong depth-of-field blur behind the subject.', gradient: 'Background: a smooth, bold colour gradient — no scene and no objects in the background.', studio: 'Background: a clean studio backdrop with soft professional lighting.' };
+  const SUBJ_PHRASE = { auto: '', face: 'Main subject: one expressive human face in close-up, strong emotion.', character: 'Main subject: stylised character art (game/anime style), dynamic pose.', product: 'Main subject: one hero product or object, large and centred.', none: 'No people and no faces — objects, places and shapes only.' };
+  const TSTYLE_NAMES = { outline: 'Bold outline', '3d': '3D pop', neon: 'Neon glow', minimal: 'Clean minimal' };
+  const BG_NAMES = { auto: 'Auto background', game: 'Blurred game scene', gradient: 'Gradient', studio: 'Studio' };
+  const SUBJ_NAMES = { auto: 'Auto subject', face: 'Face close-up', character: 'Character art', product: 'Product / object', none: 'No person' };
+  const VAR_ANGLES = ['wide dramatic angle', 'close-up energy, subject large in frame', 'bold diagonal composition', 'clean centred composition'];
+  function wrapLines(x, text, maxW) {
+    const words = String(text).toUpperCase().split(/\s+/); const lines = []; let line = '';
+    for (const w of words) { const t = line ? line + ' ' + w : w; if (x.measureText(t).width > maxW && line) { lines.push(line); line = w; } else line = t; }
+    if (line) lines.push(line);
+    return lines;
+  }
+  function composeThumb(bg, head, sub) {
+    const [W, H] = RATIOS[ratio];
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const x = cv.getContext('2d');
+    const sch = SCHEMES[cScheme] || SCHEMES.auto;
+    if (bg) {
+      const sc = Math.max(W / bg.width, H / bg.height);
+      if (cBg === 'game') { x.save(); x.filter = 'blur(6px)'; const s2 = sc * 1.07; x.drawImage(bg, (W - bg.width * s2) / 2, (H - bg.height * s2) / 2, bg.width * s2, bg.height * s2); x.restore(); }
+      else x.drawImage(bg, (W - bg.width * sc) / 2, (H - bg.height * sc) / 2, bg.width * sc, bg.height * sc);
+    } else { const g = x.createLinearGradient(0, 0, W, H); g.addColorStop(0, sch.grad[0]); g.addColorStop(1, sch.grad[1]); x.fillStyle = g; x.fillRect(0, 0, W, H); }
+    const sh = x.createLinearGradient(0, H * 0.42, 0, H); sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,.72)');
+    x.fillStyle = sh; x.fillRect(0, 0, W, H);
+    const drawStyled = (txt, fs, y) => {
+      x.font = `${cTStyle === 'minimal' ? 800 : 900} ${fs}px Poppins, Arial, sans-serif`;
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      if (cTStyle === '3d') {
+        x.fillStyle = 'rgba(0,0,0,.85)'; x.fillText(txt, W / 2 + fs * 0.07, y + fs * 0.07);
+        x.fillStyle = sch.glow; x.fillText(txt, W / 2 + fs * 0.035, y + fs * 0.035);
+        x.fillStyle = inkColor; x.fillText(txt, W / 2, y);
+      } else if (cTStyle === 'neon') {
+        x.save(); x.shadowColor = sch.glow; x.shadowBlur = fs * 0.55; x.fillStyle = inkColor;
+        x.fillText(txt, W / 2, y); x.fillText(txt, W / 2, y); x.restore();
+      } else if (cTStyle === 'minimal') {
+        x.fillStyle = inkColor; x.fillText(txt, W / 2, y);
+      } else {
+        x.lineWidth = Math.max(6, fs * 0.16); x.strokeStyle = 'rgba(0,0,0,.9)'; x.lineJoin = 'round'; x.fillStyle = inkColor;
+        x.strokeText(txt, W / 2, y); x.fillText(txt, W / 2, y);
+      }
+    };
+    if (head) {
+      const fs = Math.round(W * (head.length > 18 ? 0.07 : 0.088));
+      x.font = `900 ${fs}px Poppins, Arial, sans-serif`;
+      const lines = wrapLines(x, head, W * 0.92).slice(0, 3);
+      const lh = fs * 1.12;
+      const subFs = Math.round(fs * 0.42);
+      const bottom = H - H * 0.055;
+      if (sub) {
+        x.font = `900 ${subFs}px Poppins, Arial, sans-serif`;
+        const subLines = wrapLines(x, sub, W * 0.9).slice(0, 1);
+        if (subLines.length) drawStyled(subLines[0], subFs, bottom - lines.length * lh - subFs * 0.85);
+      }
+      lines.forEach((ln, i) => drawStyled(ln, fs, bottom - (lines.length - i) * lh + lh / 2));
+    }
+    return cv;
+  }
+  // Creator: designer-brief-style prompt -> AI background -> styled headline
+  // and sub-text composed at the exact ratio size, per chosen version count.
   on('cgo', 'click', async (e) => {
     if (!requireKey()) return;
     const prompt = $('cprompt').value.trim();
-    const head = $('chead').value.trim();
+    let head = $('chead').value.trim();
+    const sub = $('csub').value.trim();
     if (!prompt && !head) { toast('Describe the thumbnail or write its headline text.', true); return; }
     const b = e.currentTarget; busy(b, true);
+    const prog = makeProgress($('cprog'), ['Writing the design', 'Creating the versions', 'Ready']);
     try {
-      const [W, H] = RATIOS[ratio];
-      let bg = null;
-      try {
-        const url = await geminiImage(`YouTube thumbnail background art, ${$('cstyle').value} style, dramatic, high contrast, no text, no letters, no watermark: ${prompt || head}`, null, modelRatio(), { onRetry: retryNote(b) });
-        bg = await loadImg(url);
-      } catch { /* gradient fallback below */ }
-      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-      const x = cv.getContext('2d');
-      if (bg) { const sc = Math.max(W / bg.width, H / bg.height); x.drawImage(bg, (W - bg.width * sc) / 2, (H - bg.height * sc) / 2, bg.width * sc, bg.height * sc); }
-      else { const g = x.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#23307a'); g.addColorStop(1, '#0b1026'); x.fillStyle = g; x.fillRect(0, 0, W, H); }
-      const sh = x.createLinearGradient(0, H * 0.45, 0, H); sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,.72)');
-      x.fillStyle = sh; x.fillRect(0, 0, W, H);
-      if (head) {
-        const fs = Math.round(W * (head.length > 18 ? 0.07 : 0.088));
-        x.font = `900 ${fs}px Poppins, Arial, sans-serif`; x.textAlign = 'center';
-        x.lineWidth = Math.max(8, W * 0.01); x.strokeStyle = 'rgba(0,0,0,.9)'; x.lineJoin = 'round'; x.fillStyle = inkColor;
-        const words = head.toUpperCase().split(/\s+/); const lines = []; let line = '';
-        for (const w of words) { const t = line ? line + ' ' + w : w; if (x.measureText(t).width > W * 0.9 && line) { lines.push(line); line = w; } else line = t; }
-        if (line) lines.push(line);
-        let yy = H - (lines.length - 1) * fs * 1.08 - H * 0.06;
-        for (const ln of lines.slice(0, 4)) { x.strokeText(ln, W / 2, yy); x.fillText(ln, W / 2, yy); yy += fs * 1.08; }
+      if (!head && prompt) {
+        // Headline prefilled from the topic: one quick call writes it, and it
+        // is put into the field so the student sees (and can edit) it.
+        try {
+          const h = (await geminiText(`Write a punchy YouTube thumbnail headline of 2-4 words, ALL CAPS, no quotes, no punctuation except !, for this video: ${prompt}`, { temperature: 0.8 })).replace(/["\n]/g, '').trim().slice(0, 42);
+          if (h) { head = h; $('chead').value = h; }
+        } catch { /* headline simply stays empty */ }
       }
+      prog.setStep(1);
+      const [W, H] = RATIOS[ratio];
+      const sch = SCHEMES[cScheme] || SCHEMES.auto;
       out('cresult', '');
       const host = $('cresult');
-      const card = document.createElement('div'); card.className = 'outcard';
-      card.innerHTML = `<div class="spread"><b>Your thumbnail</b><span class="tag y">${ratio} · ${W}×${H}px</span></div>`;
-      cv.className = 'thumbcv'; card.appendChild(cv);
-      const dl = document.createElement('button'); dl.className = 'btn sm mt'; dl.textContent = 'Download thumbnail (PNG)';
-      dl.addEventListener('click', () => { const a = document.createElement('a'); a.download = `thumbnail-${ratio.replace(':', 'x')}.png`; a.href = cv.toDataURL('image/png'); a.click(); });
-      card.appendChild(dl); host.appendChild(card);
-      toast(bg ? 'AI thumbnail made at ' + ratio + '.' : 'Made with a designed background (image model did not answer) at ' + ratio + '.');
-    } catch (err) { toast(err.message, true); }
+      let madeAI = 0;
+      for (let v = 0; v < cVers; v++) {
+        prog.setStep(1, cVers > 1 ? `Creating version ${v + 1} of ${cVers}` : 'Creating the thumbnail');
+        let bg = null;
+        try {
+          const url = await geminiImage(`YouTube thumbnail background art designed by a graphic designer. Scene: ${prompt || head}. Art style: ${$('cstyle').value}. Colour palette: ${sch.palette}. ${BG_PHRASE[cBg] || ''} ${SUBJ_PHRASE[cSubject] || ''}${cVers > 1 ? ` Composition: ${VAR_ANGLES[v % VAR_ANGLES.length]}.` : ''} Dramatic, high contrast, no text, no letters, no watermark.`, null, modelRatio(), { onRetry: retryNote(b) });
+          bg = await loadImg(url); madeAI++;
+        } catch { /* designed-gradient fallback in composeThumb */ }
+        const cv = composeThumb(bg, head, sub);
+        const card = document.createElement('div'); card.className = 'outcard';
+        card.innerHTML = `<div class="spread"><b>${cVers > 1 ? `Version ${v + 1}` : 'Your thumbnail'}</b><span class="tag y">${ratio} · ${W}×${H}px</span></div><p class="small dim mt">${esc(TSTYLE_NAMES[cTStyle])} text · ${esc(sch.name)} scheme · ${esc(BG_NAMES[cBg])} · ${esc(SUBJ_NAMES[cSubject])}${bg ? '' : ' · designed background (image model did not answer)'}</p>`;
+        cv.className = 'thumbcv'; card.appendChild(cv);
+        const dl = document.createElement('button'); dl.className = 'btn sm mt'; dl.textContent = 'Download thumbnail (PNG)';
+        dl.addEventListener('click', () => { const a = document.createElement('a'); a.download = `thumbnail-${ratio.replace(':', 'x')}${cVers > 1 ? `-v${v + 1}` : ''}.png`; a.href = cv.toDataURL('image/png'); a.click(); });
+        card.appendChild(dl); host.appendChild(card);
+        prog.setFraction((v + 1) / cVers);
+      }
+      prog.done();
+      toast(madeAI ? `${cVers} thumbnail version${cVers > 1 ? 's' : ''} made at ${ratio} — same design choices on each.` : 'Made with designed backgrounds (the image model did not answer).');
+    } catch (err) { prog.fail(err.message); toast(err.message, true); }
     busy(b, false, 'Create thumbnail');
   });
 }
@@ -447,29 +1081,75 @@ if (tool === 'upload' || tool === 'lecture-clips') {
     for (const m of ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']) if (MediaRecorder.isTypeSupported(m)) return m;
     return '';
   }
-  // In-browser export: records the chosen segment in real time to WebM.
-  // Vertical mode renders through a 1080x1920 canvas (centre-crop) instead.
+  // Caption burn-in toggle (Upload page; absent on Lecture Clips — guarded).
+  const capSwitch = $('capon');
+  if (capSwitch) capSwitch.addEventListener('click', () => capSwitch.classList.toggle('on'));
+  // In-browser export: the chosen segment is drawn onto a canvas at the
+  // chosen quality and recorded in real time to WebM. Vertical exports use
+  // the exact quality dimensions (1080p 1080×1920, 720p 720×1280, 480p
+  // 480×854); original shape is scaled to the quality height, never upscaled.
+  const QUALITY_H = { '1080p': 1080, '720p': 720, '480p': 480 };
+  const QUALITY_V = { '1080p': [1080, 1920], '720p': [720, 1280], '480p': [480, 854] };
+  function drawCaption(x, W, H) {
+    const sw = $('capon');
+    if (!sw || !sw.classList.contains('on')) return;
+    const text = ($('captext')?.value || '').trim();
+    if (!text) return;
+    const style = $('capstyle') ? $('capstyle').value : 'Bold bottom';
+    const fs = Math.round(H * 0.042);
+    x.save();
+    x.font = `900 ${fs}px Poppins, Arial, sans-serif`;
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    // word-wrap to at most 2 lines
+    const words = text.split(/\s+/); const lines = []; let line = '';
+    for (const w of words) { const t = line ? line + ' ' + w : w; if (x.measureText(t).width > W * 0.88 && line) { lines.push(line); line = w; } else line = t; }
+    if (line) lines.push(line);
+    const use = lines.slice(0, 2), lh = fs * 1.25;
+    if (style === 'Top banner') {
+      const bh = lh * use.length + fs * 0.7;
+      x.fillStyle = '#ffc81f'; x.fillRect(0, 0, W, bh);
+      x.fillStyle = '#17130a';
+      use.forEach((ln, i) => x.fillText(ln, W / 2, bh / 2 + (i - (use.length - 1) / 2) * lh));
+    } else if (style === 'Box') {
+      const bw = Math.max(...use.map(ln => x.measureText(ln).width)) + fs * 1.1;
+      const bh = lh * use.length + fs * 0.55;
+      x.fillStyle = 'rgba(0,0,0,.78)';
+      x.beginPath(); x.roundRect((W - bw) / 2, H - bh - H * 0.045, bw, bh, 12); x.fill();
+      x.fillStyle = '#fff';
+      use.forEach((ln, i) => x.fillText(ln, W / 2, H - bh - H * 0.045 + bh / 2 + (i - (use.length - 1) / 2) * lh));
+    } else {
+      x.lineWidth = Math.max(4, fs * 0.18); x.strokeStyle = 'rgba(0,0,0,.9)'; x.lineJoin = 'round'; x.fillStyle = '#fff';
+      use.forEach((ln, i) => { const y = H * 0.93 - (use.length - 1 - i) * lh; x.strokeText(ln, W / 2, y); x.fillText(ln, W / 2, y); });
+    }
+    x.restore();
+  }
   on('export', 'click', async () => {
     if (!v.src) { toast('Upload a video first.', true); return; }
     const mime = pickRecorderMime();
     if (mime === null) { toast('This browser cannot export in-page. Use Chrome on Android/desktop.', true); return; }
     const vertical = $('fmt') && $('fmt').value === 'vertical';
+    const q = ($('quality') && $('quality').value) || '1080p';
     const b = $('export'); busy(b, true, 'Export clip (WebM)');
     try {
-      let stream;
-      let raf = 0;
-      if (vertical) {
-        const cv = document.createElement('canvas'); cv.width = 1080; cv.height = 1920;
-        const cx = cv.getContext('2d');
-        const draw = () => { const sc = Math.max(1080 / v.videoWidth, 1920 / v.videoHeight); cx.fillStyle = '#000'; cx.fillRect(0, 0, 1080, 1920); cx.drawImage(v, (1080 - v.videoWidth * sc) / 2, (1920 - v.videoHeight * sc) / 2, v.videoWidth * sc, v.videoHeight * sc); raf = requestAnimationFrame(draw); };
-        draw();
-        stream = cv.captureStream(30);
-        if (v.captureStream) v.captureStream().getAudioTracks().forEach(t => stream.addTrack(t));
-        b._stopDraw = () => cancelAnimationFrame(raf);
-      } else {
-        if (!v.captureStream) { toast('This browser cannot export in-page. Use Chrome on Android/desktop.', true); busy(b, false, 'Export clip (WebM)'); return; }
-        stream = v.captureStream();
+      let W, H;
+      if (vertical) { [W, H] = QUALITY_V[q] || QUALITY_V['1080p']; }
+      else {
+        const sc = Math.min(1, (QUALITY_H[q] || 1080) / (v.videoHeight || 1080));
+        W = Math.max(2, Math.round(v.videoWidth * sc) & ~1); H = Math.max(2, Math.round(v.videoHeight * sc) & ~1);
       }
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      if (!cv.captureStream) { toast('This browser cannot export in-page. Use Chrome on Android/desktop.', true); busy(b, false, 'Export clip (WebM)'); return; }
+      const cx = cv.getContext('2d');
+      let raf = 0;
+      const draw = () => {
+        if (vertical) { const sc = Math.max(W / v.videoWidth, H / v.videoHeight); cx.fillStyle = '#000'; cx.fillRect(0, 0, W, H); cx.drawImage(v, (W - v.videoWidth * sc) / 2, (H - v.videoHeight * sc) / 2, v.videoWidth * sc, v.videoHeight * sc); }
+        else cx.drawImage(v, 0, 0, W, H);
+        drawCaption(cx, W, H);
+        raf = requestAnimationFrame(draw);
+      };
+      draw();
+      const stream = cv.captureStream(30);
+      if (v.captureStream) v.captureStream().getAudioTracks().forEach(t => stream.addTrack(t));
       const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
       const chunks = [];
       rec.ondataavailable = (x) => chunks.push(x.data);
@@ -479,14 +1159,15 @@ if (tool === 'upload' || tool === 'lecture-clips') {
       const stopAt = Number($('out').value);
       await new Promise(r => { const iv = setInterval(() => { if (v.currentTime >= stopAt || v.paused) { clearInterval(iv); r(); } }, 200); });
       v.pause(); rec.stop(); await done;
-      if (b._stopDraw) b._stopDraw();
+      cancelAnimationFrame(raf);
       const name = ($('ctitle')?.value.trim() || 'streamclip-clip').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'streamclip-clip';
       download(`${name}.webm`, new Blob(chunks, { type: 'video/webm' }));
       saveShort(($('ctitle')?.value.trim() || name), v);
-      toast(vertical ? 'Vertical 9:16 clip exported as WebM.' : 'Clip exported as WebM.');
+      toast(`Clip exported as WebM at ${W}×${H} (${q}).`);
     } catch (err) { toast('Export failed: ' + err.message, true); }
     busy(b, false, 'Export clip (WebM)');
   });
+
   // AI watch: Gemini watches the uploaded file itself (small files only).
   on('watch', 'click', async (e) => {
     if (!requireKey()) return;
@@ -548,7 +1229,7 @@ if (tool === 'clipper') {
   // Stream / scan state
   let videoId = '', streamTitle = '', streamChannel = '', isLive = false, liveViewers = null, handoffId = '';
   let durationSec = 0, probedId = '';
-  let scanRange = 'whole', shortLen = 45, pickCount = 3, voiceMode = 'none';
+  let scanRange = 'whole', shortLen = 45, pickCount = 3, voiceMode = 'none', quality = '1080p';
   let scannedRanges = [], scannedUrl = '';
 
   const ytId = (u) => { const m = String(u || '').match(/(?:youtube\.com\/(?:watch\?[^#]*v=|live\/|shorts\/)|youtu\.be\/)([\w-]{6,})/); return m ? m[1] : ''; };
@@ -625,6 +1306,7 @@ if (tool === 'clipper') {
   wireChips('rg-len', 'len', v => { shortLen = Number(v); });
   wireChips('rg-count', 'count', v => { pickCount = Number(v); });
   wireChips('rg-voice', 'voice', v => { voiceMode = v; if (found.length) renderFound(); });
+  wireChips('rg-quality', 'q', v => { quality = v; if (found.length) renderFound(); });
 
   // Handoff: a stream link from the home hero or a Live Now card arrives as a
   // query param and/or a one-shot localStorage note (which can also carry the
@@ -694,6 +1376,7 @@ if (tool === 'clipper') {
     return {
       title: b.topTitle || m.title,
       time: timeLine(m), score: m.score, watch: watchUrl(m),
+      quality,
       hook: b.hookText || m.hook || '',
       cut: (b.cutStart != null && b.cutEnd != null) ? `${fmt(b.cutStart)} – ${fmt(b.cutEnd)}` : timeLine(m),
       frame: b.frameMode ? `${b.frameMode === 'fill' ? 'Fill the screen' : 'Show all, blurred sides'} · zoom ${Number(b.zoom || 1).toFixed(2)}x · position ${b.fx != null ? b.fx : 50}% / ${b.fy != null ? b.fy : 50}%` : 'Show all, blurred sides (default)',
@@ -709,7 +1392,7 @@ if (tool === 'clipper') {
   function briefText(picks) {
     return picks.map((m, i) => {
       const br = momentBrief(m);
-      return `## Short ${i + 1}: ${br.title}\n- Time: ${br.time} (score ${br.score})\n- Watch this scene: ${br.watch || '—'}\n- Cut: ${br.cut}\n- Hook: ${br.hook || '—'}\n- Frame: ${br.frame}\n- Captions: ${br.captions}\n- Voice: ${br.voice} (${br.voiceVolumes})\n- Music: ${br.music}\n- Top text: ${br.topText}\n- Overlays: ${br.overlays.join('; ') || 'none'}\n- Posting caption: ${br.postCaption || '—'}`;
+      return `## Short ${i + 1}: ${br.title}\n- Time: ${br.time} (score ${br.score})\n- Quality: ${br.quality}\n- Watch this scene: ${br.watch || '—'}\n- Cut: ${br.cut}\n- Hook: ${br.hook || '—'}\n- Frame: ${br.frame}\n- Captions: ${br.captions}\n- Voice: ${br.voice} (${br.voiceVolumes})\n- Music: ${br.music}\n- Top text: ${br.topText}\n- Overlays: ${br.overlays.join('; ') || 'none'}\n- Posting caption: ${br.postCaption || '—'}`;
     }).join('\n\n');
   }
   function renderBrief() {
@@ -720,7 +1403,7 @@ if (tool === 'clipper') {
       const br = momentBrief(m);
       return `<div class="outcard"><div class="spread"><b>${esc(br.title)}</b><span class="tag y">${esc(br.time)}</span></div>
       <p class="small dim mt">Score ${br.score}${br.watch ? ` · <a href="${br.watch}" target="_blank" rel="noopener">▶ Watch this scene</a>` : ''}</p>
-      <p class="small mt"><b>Cut:</b> ${esc(br.cut)}<br><b>Hook:</b> ${esc(br.hook || '—')}<br><b>Frame:</b> ${esc(br.frame)}<br><b>Captions:</b> ${esc(br.captions)}<br><b>Voice:</b> ${esc(br.voice)} (${esc(br.voiceVolumes)})<br><b>Music:</b> ${esc(br.music)}<br><b>Top text:</b> ${esc(br.topText)}${br.overlays.length ? `<br><b>Overlays:</b> ${esc(br.overlays.join('; '))}` : ''}${br.postCaption ? `<br><b>Posting caption:</b> ${esc(br.postCaption)}` : ''}</p>
+      <p class="small mt"><b>Cut:</b> ${esc(br.cut)}<br><b>Quality:</b> ${esc(br.quality)}<br><b>Hook:</b> ${esc(br.hook || '—')}<br><b>Frame:</b> ${esc(br.frame)}<br><b>Captions:</b> ${esc(br.captions)}<br><b>Voice:</b> ${esc(br.voice)} (${esc(br.voiceVolumes)})<br><b>Music:</b> ${esc(br.music)}<br><b>Top text:</b> ${esc(br.topText)}${br.overlays.length ? `<br><b>Overlays:</b> ${esc(br.overlays.join('; '))}` : ''}${br.postCaption ? `<br><b>Posting caption:</b> ${esc(br.postCaption)}` : ''}</p>
       <button class="chip mt" data-editb="${found.indexOf(m)}">Open editor</button></div>`;
     }).join('') +
       `<div class="note mt"><div><b>Render queue.</b><div class="small dim">These briefs are saved for the render engine — the final downloadable videos are queued, not rendered here, because this website does not run a render engine yet. Nothing above fakes a finished file.</div></div></div>
@@ -784,6 +1467,7 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
     const b = e.currentTarget; busy(b, true);
     found = []; scannedRanges = []; scannedUrl = url; renderFound();
     $('scansteps').classList.remove('hidden');
+    const prog = makeProgress($('scanprog'), ['Reading the video', 'Watching & scoring moments', 'Ranking the best', 'Ready']);
     stepEl('st1', 'now', 'Asking Gemini about this video…');
     stepEl('st2', '', 'Watching in 10-minute windows and scoring moments');
     stepEl('st3', '', 'Ranking and pre-picking the best');
@@ -816,6 +1500,7 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
       for (let k = 0; k < winList.length && !beyond; k++) {
         const [s, en] = winList[k];
         stepEl('st2', 'now', `Watching ${fmt(s)} – ${fmt(en)} (window ${k + 1} of ${winList.length})…`);
+        prog.setStep(1); prog.setFraction(k / winList.length);
         try {
           const d = await scanWindow(url, s, en);
           if (d.beyondEnd) { beyond = true; break; }
@@ -823,19 +1508,23 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
           scannedRanges.push([s, en]);
           found.sort((a, b2) => b2.score - a.score);
           renderFound();
+          prog.setFraction((k + 1) / winList.length);
         } catch (err) {
           if (k === 0) throw err; // first window failing = the link itself failed
           stepEl('st2', 'now', `Window ${k + 1} could not be watched (${err.message}) — continuing…`);
         }
       }
       stepEl('st2', 'ok', `Watched the video — ${found.length} moments found${droppedTotal ? ` · Ignored ${droppedTotal} moment${droppedTotal > 1 ? 's' : ''} past the video's end` : ''}`);
+      prog.setStep(2);
       finishPick(pickCount, Number($('cmin').value));
       renderFound();
       stepEl('st3', 'ok', `Best ${found.filter(m => m.picked).length} moments pre-picked (score ≥ ${$('cmin').value})`);
+      prog.done();
       if (!found.length) toast('Gemini watched it but found no strong moments. Try the transcript mode, or a different stream.', true);
     } catch (err) {
       stepEl('st1', '', 'Scan stopped');
       stepEl('st2', '', '');
+      prog.fail(err.message);
       toast('YouTube scan failed: ' + err.message + ' — private/age-restricted or very long videos can fail; the Transcript tab always works.', true);
     }
     busy(b, false, '✦ Start scanning');
@@ -850,6 +1539,7 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
     const url = $('slink').value.trim();
     if (!scannedUrl || url !== scannedUrl) { toast('Scan this video first, then scan its newest part.', true); return; }
     $('scansteps').classList.remove('hidden');
+    const prog = makeProgress($('scanprog'), ['Checking the newest part', 'Watching the newest window', 'Updating the list', 'Ready']);
     stepEl('st2', 'now', 'Checking the newest part…');
     try {
       try {
@@ -866,6 +1556,7 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
         : `Scanning the newest part (${fmt(ts)} – ${fmt(te)})…`);
       const pickedAt = new Set(found.filter(m => m.picked).map(m => m.startSec));
       found = found.filter(m => !(m.startSec != null && m.startSec >= ts && m.startSec < te));
+      prog.setStep(1);
       const d = await scanWindow(url, ts, te);
       let dropped = 0;
       if (!d.beyondEnd) dropped = addMoments(d.moments, ts).dropped;
@@ -874,7 +1565,8 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
       found.sort((a, b2) => b2.score - a.score);
       renderFound();
       stepEl('st2', 'ok', `Newest part scanned — ${found.length} moments in total${dropped ? ` · Ignored ${dropped} moment${dropped > 1 ? 's' : ''} past the video's end` : ''}`);
-    } catch (err) { toast('Newest-part scan failed: ' + err.message, true); renderFound(); }
+      prog.done();
+    } catch (err) { prog.fail(err.message); toast('Newest-part scan failed: ' + err.message, true); renderFound(); }
   }
 
   /* ----- Transcript mode: same scoring engine, chunk by chunk ----- */
@@ -908,12 +1600,203 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
     getVideoId: () => videoId,
     getStreamTitle: () => streamTitle || 'this stream',
     getVoiceMode: () => voiceMode,
+    getQuality: () => quality,
     getDuration: () => durationSec,
     pickedCount: () => found.filter(m => m.picked).length,
     rerender: () => renderFound(),
     onMake: () => { if (editorHandle) editorHandle.close(); renderFound(); renderBrief(); toast('Saved into the render queue — brief below.'); },
     onDelete: (m) => { found = found.filter(x => x !== m); if (editorHandle) editorHandle.close(); renderFound(); toast('Short deleted.'); },
   });
+}
+
+/* ---------- Lecture to Revision Clips: find concepts from the source ----------
+ * YouTube source: the Stream Clipper's window-scan machinery — Gemini watches
+ * the lecture in 10-minute windows and returns concepts with real timestamps.
+ * PDF / text source: there is no video to cut, so the model honestly returns
+ * the KEY SECTIONS of the document as revision cards (never fake timestamps).
+ */
+if (tool === 'lecture-clips') {
+  const LC_PROBE = 'Return JSON only: {"durationSec": 0, "title": ""} — durationSec is the total length of this video in seconds (a number), title is its title. If you truly cannot tell the length, use 0.';
+  function conceptCard(m, i) {
+    return `<div class="outcard"><b>${i + 1}. ${esc(m.title)}</b>
+      <p class="small dim mt">${fmt(m.startSec || 0)} – ${fmt(m.endSec || 0)} · ${esc(m.why || '')}</p>
+      <p class="mt"><span class="tag y">Hook</span> ${esc(m.hook || '')}</p>
+      <p class="small dim mt"><a href="https://www.youtube.com/watch?v=${SRC.videoId}&t=${Math.max(0, Math.floor(m.startSec || 0))}s" target="_blank" rel="noopener">▶ Watch this concept in the lecture</a></p></div>`;
+  }
+  function sectionCard(m, i) {
+    return `<div class="outcard"><div class="spread"><b>${i + 1}. ${esc(m.title)}</b><span class="tag">Section</span></div>
+      ${m.summary ? `<p class="out mt">${esc(m.summary)}</p>` : ''}
+      ${m.why ? `<p class="small dim mt">Why it matters: ${esc(m.why)}</p>` : ''}
+      ${m.hook ? `<p class="mt"><span class="tag y">Remember</span> ${esc(m.hook)}</p>` : ''}</div>`;
+  }
+  on('lcgo', 'click', async (e) => {
+    if (!requireKey() || !requireSource()) return;
+    const b = e.currentTarget; busy(b, true);
+    const focus = $('lcfocus') ? $('lcfocus').value : 'Key concepts';
+    const prog = makeProgress($('prog'), SRC.type === 'youtube' ? ['Reading the lecture', 'Watching the lecture', 'Collecting the concepts', 'Ready'] : ['Reading your material', 'Picking the key sections', 'Ready']);
+    try {
+      if (SRC.type === 'youtube') {
+        $('lcsteps').classList.remove('hidden');
+        sstep('lcst1', 'now', 'Asking Gemini about this lecture…');
+        sstep('lcst2', '', 'Watching in 10-minute windows');
+        sstep('lcst3', '', 'Collecting the key concepts');
+        let durSec = SRC.durationSec || 0;
+        if (!durSec) {
+          try { const p = await geminiYouTubeJson(SRC.link, LC_PROBE, { timeoutMs: 120000, onRetry: ({ attempt, total }) => sstep('lcst1', 'now', `Google is busy — retrying (${attempt}/${total})…`) }); durSec = Number(p.durationSec) || 0; } catch { /* windows below still run */ }
+        }
+        sstep('lcst1', 'ok', durSec ? `Lecture found — ${fmt(durSec)} long` : 'Lecture accepted by Gemini');
+        sstep('lcst2', 'now', 'Watching…');
+        prog.setStep(1);
+        const WIN = 600;
+        const total = durSec > 0 ? Math.min(durSec, 4 * 3600) : 3600;
+        const wins = Math.max(1, Math.ceil(total / WIN));
+        const items = [];
+        let beyond = false;
+        for (let k = 0; k < wins && !beyond; k++) {
+          const s = k * WIN, en = Math.min(total, s + WIN);
+          sstep('lcst2', 'now', `Watching ${fmt(s)} – ${fmt(en)} (window ${k + 1} of ${wins})…`);
+          try {
+            const d = await geminiYouTubeJson(SRC.link, `Watch ONLY the segment of this lecture you were given (it starts at ${fmt(s)} of the full lecture). Find the key concepts a student must revise. Focus on: ${focus}. Return JSON only: {"beyondEnd": false, "items":[{"title":"concept name","startSec":0,"endSec":0,"why":"one line: why it matters for the exam","hook":"3-6 word memory hook"}]}
+startSec/endSec are seconds FROM THE START OF THIS SEGMENT. Up to 4 concepts per segment, in teaching order; each concept 30-60 seconds. If this segment is past the end of the lecture, return {"beyondEnd": true, "items": []}.`, { startSec: s, endSec: en, onRetry: ({ attempt, total }) => sstep('lcst2', 'now', `Google is busy — retrying (${attempt}/${total})…`) });
+            if (d.beyondEnd) { beyond = true; break; }
+            for (const m of (d.items || [])) {
+              const st = s + (parseTs(m.startSec) || 0);
+              let en2 = m.endSec != null ? s + (parseTs(m.endSec) || 0) : null;
+              if (durSec > 0 && st >= durSec) continue;
+              if (durSec > 0 && en2 != null && en2 > durSec) en2 = durSec;
+              items.push({ title: m.title || 'Concept', startSec: st, endSec: en2, why: m.why || '', hook: m.hook || '' });
+            }
+            items.sort((a, b2) => a.startSec - b2.startSec);
+            out('lcresult', items.map(conceptCard).join(''));
+            prog.setFraction((k + 1) / wins);
+          } catch (err) {
+            if (k === 0) throw err;
+            sstep('lcst2', 'now', `Window ${k + 1} could not be watched (${err.message}) — continuing…`);
+          }
+        }
+        sstep('lcst2', 'ok', `Watched the lecture — ${items.length} concepts found`);
+        sstep('lcst3', 'ok', 'Concepts listed below, in lecture order');
+        prog.setStep(2);
+        out('lcresult', (items.map(conceptCard).join('') || '<div class="outcard">No strong concepts found in this lecture. Try a different focus above.</div>')
+          + '<p class="small dim mt">These are the exact moments in the YouTube lecture — tap one to watch it there. To download real clip files, add your own copy of the lecture in Step 3 below and cut each concept there.</p>');
+        prog.done();
+        if (!items.length) toast('Gemini watched the lecture but found no strong concepts.', true);
+      } else {
+        const st = $('lcstatus'); if (st) st.textContent = 'Reading the material and picking the key sections…';
+        prog.setStep(1);
+        const d = await sourceJson(`From the attached study material, pick the key sections a student must revise. Focus on: ${focus}. Return JSON only: {"items":[{"title":"section name","summary":"2-3 sentence summary of the section","why":"one line: why it matters for the exam","hook":"3-6 word memory hook"}]}
+Up to 8 sections, in the material's own order. This is a document, not a video — do NOT invent timestamps.`, { temperature: 0.45, onRetry: retryNote(b) });
+        const items = d.items || [];
+        out('lcresult', (items.map(sectionCard).join('') || '<div class="outcard">No clear sections found. Try a longer or cleaner document.</div>')
+          + '<p class="small dim mt">These are the key sections of your document, as revision cards. A PDF has no video timestamps, so nothing here pretends to be a clip — revise section by section.</p>');
+        prog.done();
+        if (st) st.textContent = items.length ? `Done — ${items.length} key sections found.` : '';
+      }
+    } catch (err) { prog.fail(err.message); toast('Concept finder failed: ' + err.message, true); const st = $('lcstatus'); if (st) st.textContent = ''; }
+    busy(b, false, 'Find revision clips');
+  });
+}
+
+/* ---------- Exam Prep: exam questions + revision sheet + ask your lecture ---------- */
+if (tool === 'examprep') {
+  /* ----- Exam questions — practice for your test ----- */
+  on('eqgo', 'click', async (e) => {
+    if (!requireKey() || !requireSource()) return;
+    const b = e.currentTarget; busy(b, true);
+    const prog = makeProgress($('prog'), ['Reading your material', 'Writing MCQs', 'Writing short & long questions', 'Ready']);
+    prog.setStep(1);
+    try {
+      const total = Number($('eqcount').value);
+      const longN = total >= 20 ? 3 : 2;
+      const mcqN = Math.round(total / 2);
+      const shortN = total - mcqN - longN;
+      const d = await sourceJson(`Make practice EXAM questions from the attached lecture material ONLY. Difficulty: ${$('eqdiff').value}. Return JSON only:
+{"mcqs":[{"q":"...","options":["a","b","c","d"],"answer":0,"why":"one line"}],"short":[{"q":"...","answer":"model answer, 3-5 lines"}],"long":[{"q":"...","outline":["main point","..."]}]}
+Exactly ${mcqN} MCQs, ${shortN} short questions and ${longN} long/essay questions. Questions must test real understanding of THIS material — invent nothing that is not in it. Mix the topics across the whole material, in its own order.`, { temperature: 0.55, onRetry: retryNote(b) });
+      const mcqs = d.mcqs || [], shorts = d.short || [], longs = d.long || [];
+      const letters = ['A', 'B', 'C', 'D', 'E'];
+      out('eqresult', `
+      ${mcqs.length ? `<h3 class="mt2">MCQs — choose in your head, then reveal</h3>${mcqs.map((q, i) => `<div class="outcard"><b>Q${i + 1}. ${esc(q.q)}</b>
+        <ul class="mt">${(q.options || []).map((o, oi) => `<li><b>${letters[oi] || oi + 1}.</b> ${esc(o)}</li>`).join('')}</ul>
+        <button class="chip mt" data-reveal>Show answer</button>
+        <p class="small mt hidden" data-answer><b>Answer: ${letters[Number(q.answer)] || ''}. ${esc((q.options || [])[Number(q.answer)] || '')}</b>${q.why ? ` — ${esc(q.why)}` : ''}</p></div>`).join('')}` : ''}
+      ${shorts.length ? `<h3 class="mt2">Short questions</h3>${shorts.map((q, i) => `<div class="outcard"><b>S${i + 1}. ${esc(q.q)}</b>
+        <button class="chip mt" data-reveal>Show model answer</button>
+        <p class="out mt hidden" data-answer>${esc(q.answer || '')}</p></div>`).join('')}` : ''}
+      ${longs.length ? `<h3 class="mt2">Long / essay questions</h3>${longs.map((q, i) => `<div class="outcard"><b>L${i + 1}. ${esc(q.q)}</b>
+        <button class="chip mt" data-reveal>Show outline answer</button>
+        <div class="hidden" data-answer><ul class="mt">${(q.outline || []).map(o => `<li>${esc(o)}</li>`).join('')}</ul></div></div>`).join('')}` : ''}
+      ${mcqs.length || shorts.length || longs.length ? `<div class="btns two mt"><button class="btn dark sm" id="eqall">Reveal all answers</button><button class="btn sm" id="eqdl">Download questions (.md)</button></div>` : '<div class="outcard">No questions came back. Try again.</div>'}`);
+      const host = $('eqresult');
+      host.querySelectorAll('[data-reveal]').forEach(btn => btn.addEventListener('click', () => {
+        const a = btn.parentElement.querySelector('[data-answer]');
+        if (a) a.classList.toggle('hidden');
+        btn.textContent = a && !a.classList.contains('hidden') ? 'Hide answer' : (btn.textContent.includes('model') ? 'Show model answer' : btn.textContent.includes('outline') ? 'Show outline answer' : 'Show answer');
+      }));
+      on('eqall', 'click', () => host.querySelectorAll('[data-answer]').forEach(a => a.classList.remove('hidden')));
+      on('eqdl', 'click', () => {
+        const md = [`# Exam questions — practice for your test\n`,
+          ...mcqs.map((q, i) => `## MCQ ${i + 1}. ${q.q}\n${(q.options || []).map((o, oi) => `- ${letters[oi]}. ${o}`).join('\n')}\n**Answer: ${letters[Number(q.answer)]}. ${(q.options || [])[Number(q.answer)] || ''}**${q.why ? ` — ${q.why}` : ''}`),
+          ...shorts.map((q, i) => `## Short ${i + 1}. ${q.q}\n**Model answer:** ${q.answer || ''}`),
+          ...longs.map((q, i) => `## Long ${i + 1}. ${q.q}\n**Outline:**\n${(q.outline || []).map(o => `- ${o}`).join('\n')}`)].join('\n\n');
+        download('exam-questions.md', md, 'text/markdown');
+      });
+      prog.done();
+    } catch (err) { prog.fail(err.message); toast('Exam questions failed: ' + err.message, true); }
+    busy(b, false, 'Make exam questions');
+  });
+  /* ----- One-page revision sheet ----- */
+  on('sheetgo', 'click', async (e) => {
+    if (!requireKey() || !requireSource()) return;
+    const b = e.currentTarget; busy(b, true);
+    const prog = makeProgress($('prog'), ['Reading the source', 'Writing the sheet', 'Designing the sheet', 'Ready']);
+    prog.setStep(1);
+    try {
+      const d = await revisionSheetData(retryNote(b));
+      prog.setStep(2);
+      mountSheet($('sheetresult'), d, 'revision-sheet');
+      prog.done();
+      toast('Revision sheet ready — one page, everything that matters.');
+    } catch (err) { prog.fail(err.message); toast('Revision sheet failed: ' + err.message, true); }
+    busy(b, false, 'Make my revision sheet');
+  });
+  /* ----- Ask your lecture ----- */
+  const qaHist = [];
+  const askLog = $('asklog');
+  const addMsg = (text, me) => {
+    if (!askLog) return null;
+    const div = document.createElement('div');
+    div.className = 'chatmsg' + (me ? ' me' : '');
+    div.textContent = text;
+    askLog.appendChild(div);
+    askLog.scrollTop = askLog.scrollHeight;
+    return div;
+  };
+  async function ask() {
+    if (!requireKey() || !requireSource()) return;
+    const q = $('askq').value.trim();
+    if (!q) { toast('Write your question first.', true); return; }
+    $('askq').value = '';
+    addMsg(q, true);
+    const wait = addMsg('Thinking — checking your material…', false);
+    const b = $('askgo'); busy(b, true);
+    try {
+      const ctx = qaHist.slice(-3).map(x => `Earlier — Q: ${x.q}\nA: ${x.a}`).join('\n');
+      const rule = `You are a tutor for this student's own lecture material. Answer the question using ONLY that material. If the material does not cover the answer, reply exactly: "This is not covered in this lecture." Answer in simple, clear words; add a tiny example only if the material itself has one.${ctx ? `\n${ctx}` : ''}\n\nQuestion: ${q}`;
+      const a = await sourceText(rule, { temperature: 0.35, onRetry: ({ attempt, total }) => { if (wait) wait.textContent = `Google is busy — retrying (${attempt}/${total})…`; } });
+      qaHist.push({ q, a });
+      if (wait) wait.textContent = a;
+    } catch (err) { if (wait) wait.textContent = 'That did not work: ' + err.message; }
+    busy(b, false, 'Ask');
+    if (askLog) askLog.scrollTop = askLog.scrollHeight;
+  }
+  on('askgo', 'click', ask);
+  on('askq', 'keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); ask(); } });
+  // Deep links from other student tools (…#ask / …#sheet)
+  if (location.hash === '#ask' || location.hash === '#sheet') {
+    const t = document.querySelector(location.hash === '#ask' ? '#askcard' : '#sheetcard');
+    if (t) setTimeout(() => t.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350);
+  }
 }
 
 /* ---------- Your Own Branding ---------- */
@@ -924,12 +1807,16 @@ if (tool === 'branding') {
   if (saved.pos) $('bpos').value = saved.pos;
   if (saved.size) $('bsize').value = saved.size;
   if (saved.op) $('bop').value = saved.op;
+  if (saved.intro && $('bintro')) $('bintro').value = saved.intro;
+  if (saved.outro && $('boutro')) $('boutro').value = saved.outro;
+  if (saved.quality && $('bquality')) $('bquality').value = saved.quality;
   let logoUrl = saved.logo || '', logoImg = null;
   const POS = {
     br: { logo: { right: '12px', bottom: '12px', left: 'auto', top: 'auto' }, name: { left: '12px', bottom: '12px', right: 'auto', top: 'auto' } },
     bl: { logo: { left: '12px', bottom: '12px', right: 'auto', top: 'auto' }, name: { right: '12px', bottom: '12px', left: 'auto', top: 'auto' } },
     tr: { logo: { right: '12px', top: '12px', left: 'auto', bottom: 'auto' }, name: { left: '12px', bottom: '12px', right: 'auto', top: 'auto' } },
     tl: { logo: { left: '12px', top: '12px', right: 'auto', bottom: 'auto' }, name: { right: '12px', bottom: '12px', left: 'auto', top: 'auto' } },
+    tc: { logo: { left: '50%', top: '12px', right: 'auto', bottom: 'auto' }, name: { left: '12px', bottom: '12px', right: 'auto', top: 'auto' } },
   };
   const setBox = (el, css) => { Object.assign(el.style, { left: '', right: '', top: '', bottom: '' }, css); };
   const apply = () => {
@@ -939,17 +1826,20 @@ if (tool === 'branding') {
     lg.style.maxWidth = `${$('bsize').value}px`; lg.style.maxHeight = `${Math.round($('bsize').value * 0.6)}px`;
     lg.style.opacity = $('bop').value / 100;
     setBox(lg, pos.logo);
+    lg.style.transform = $('bpos').value === 'tc' ? 'translateX(-50%)' : '';
+    document.querySelectorAll('[data-bpos]').forEach(c => c.classList.toggle('on', c.dataset.bpos === $('bpos').value));
     nm.textContent = $('bname').value || '';
     nm.style.opacity = $('bop').value / 100;
     nm.style.fontSize = `${Math.max(13, $('bsize').value / 6)}px`;
     setBox(nm, pos.name);
     if ($('bsizev')) $('bsizev').textContent = $('bsize').value;
     if ($('bopv')) $('bopv').textContent = $('bop').value + '%';
-    localStorage.setItem(LS, JSON.stringify({ name: $('bname').value, logo: logoUrl, pos: $('bpos').value, size: $('bsize').value, op: $('bop').value }));
+    localStorage.setItem(LS, JSON.stringify({ name: $('bname').value, logo: logoUrl, pos: $('bpos').value, size: $('bsize').value, op: $('bop').value, intro: $('bintro') ? $('bintro').value : '', outro: $('boutro') ? $('boutro').value : '', quality: $('bquality') ? $('bquality').value : '1080p' }));
     if (logoUrl) { const im = new Image(); im.onload = () => { logoImg = im; }; im.src = logoUrl; }
   };
-  ['bname'].forEach(id => on(id, 'input', apply));
-  ['bpos', 'bsize', 'bop'].forEach(id => on(id, 'input', apply));
+  ['bname', 'bintro', 'boutro'].forEach(id => on(id, 'input', apply));
+  ['bpos', 'bsize', 'bop', 'bquality'].forEach(id => on(id, 'input', apply));
+  document.querySelectorAll('[data-bpos]').forEach(c => c.addEventListener('click', () => { $('bpos').value = c.dataset.bpos; apply(); }));
   on('logofile', 'change', (e) => {
     const f = e.target.files?.[0]; if (!f) return;
     const r = new FileReader(); r.onload = () => { logoUrl = String(r.result); apply(); }; r.readAsDataURL(f);
@@ -970,8 +1860,8 @@ if (tool === 'branding') {
     }
     if (logoImg) {
       const w = Math.min(sizePx * 2.2, W * 0.22); const h = w * logoImg.height / logoImg.width;
-      const lx = (pos === 'bl' || pos === 'tl') ? 24 : W - w - 24;
-      const ly = (pos === 'tl' || pos === 'tr') ? 24 : H - h - 24;
+      const lx = pos === 'tc' ? (W - w) / 2 : (pos === 'bl' || pos === 'tl') ? 24 : W - w - 24;
+      const ly = (pos === 'tl' || pos === 'tr' || pos === 'tc') ? 24 : H - h - 24;
       x.shadowBlur = 0; x.drawImage(logoImg, lx, ly, w, h);
     }
     x.restore();
@@ -992,10 +1882,20 @@ if (tool === 'branding') {
     const b = e.currentTarget; busy(b, true, 'Export branded video (WebM)');
     const prog = $('bprog');
     try {
-      const cv = document.createElement('canvas'); cv.width = v.videoWidth; cv.height = v.videoHeight;
+      const qh = { '1080p': 1080, '720p': 720, '480p': 480 }[$('bquality') ? $('bquality').value : '1080p'] || 1080;
+      const qsc = Math.min(1, qh / (v.videoHeight || qh));
+      const cv = document.createElement('canvas'); cv.width = Math.max(2, Math.round(v.videoWidth * qsc) & ~1); cv.height = Math.max(2, Math.round(v.videoHeight * qsc) & ~1);
       const x = cv.getContext('2d');
       let raf = 0;
-      const draw = () => { x.drawImage(v, 0, 0); drawBrand(x, cv.width, cv.height); raf = requestAnimationFrame(draw); };
+      const intro = $('bintro') ? $('bintro').value.trim() : '';
+      const outro = $('boutro') ? $('boutro').value.trim() : '';
+      const bigText = (txt) => { x.save(); x.font = `900 ${Math.round(cv.width * 0.055)}px Poppins, Arial, sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.shadowColor = '#000'; x.shadowBlur = 12; x.fillStyle = '#fff'; x.fillText(txt, cv.width / 2, cv.height / 2); x.restore(); };
+      const draw = () => {
+        x.drawImage(v, 0, 0, cv.width, cv.height); drawBrand(x, cv.width, cv.height);
+        if (intro && v.currentTime < 2) bigText(intro);
+        if (outro && (v.duration || 0) > 4.5 && v.currentTime > v.duration - 2.2) bigText(outro);
+        raf = requestAnimationFrame(draw);
+      };
       const stream = cv.captureStream(30);
       v.captureStream().getAudioTracks().forEach(t => stream.addTrack(t));
       const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)) || '';
@@ -1009,7 +1909,7 @@ if (tool === 'branding') {
       rec.stop(); await done;
       download('branded-video.webm', new Blob(chunks, { type: 'video/webm' }));
       saveShort(($('bname').value.trim() || 'Branded clip'), v);
-      if (prog) prog.textContent = 'Done — branded video downloaded. Your logo and name are burned into every frame.';
+      if (prog) prog.textContent = `Done — branded video downloaded at ${cv.width}×${cv.height}. Your logo and name are burned into every frame${intro || outro ? ', with your intro/outro text' : ''}.`;
       toast('Branded video exported.');
     } catch (err) { toast('Export failed: ' + err.message, true); if (prog) prog.textContent = ''; }
     busy(b, false, 'Export branded video (WebM)');

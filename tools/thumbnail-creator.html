@@ -26,14 +26,27 @@
 <p class="small dim mt">The AI paints the background art from this. Keep faces and the main object in the description.</p>
 <h3 class="mt2">Step 2 — Headline text &amp; look</h3>
 <label class="field"><span>Headline text (big words on the thumbnail)</span><input class="input" id="chead" placeholder="e.g. IMPOSSIBLE WIN!"></label>
+<label class="field"><span>Sub-text line (optional)</span><input class="input" id="csub" placeholder="e.g. You won't believe the ending"><span class="small dim">A smaller line above the headline. Leave the headline empty and the AI writes one from your description.</span></label>
+<h3 class="mt2">Step 3 — Design options</h3>
+<span class="small dim">Text style</span>
+<div class="chips mt" id="rg-tstyle"><button class="chip on" data-tstyle="outline">Bold outline</button><button class="chip" data-tstyle="3d">3D pop</button><button class="chip" data-tstyle="neon">Neon glow</button><button class="chip" data-tstyle="minimal">Clean minimal</button></div>
+<span class="small dim">Colour scheme</span>
+<div class="chips mt" id="rg-scheme"><button class="chip on" data-scheme="auto">Auto</button><button class="chip" data-scheme="yellow">Yellow-black</button><button class="chip" data-scheme="red">Red-black</button><button class="chip" data-scheme="blue">Blue-white</button><button class="chip" data-scheme="green">Green</button><button class="chip" data-scheme="purple">Purple</button></div>
+<span class="small dim">Background style</span>
+<div class="chips mt" id="rg-bgstyle"><button class="chip on" data-bgstyle="auto">Auto</button><button class="chip" data-bgstyle="game">Blurred game scene</button><button class="chip" data-bgstyle="gradient">Gradient</button><button class="chip" data-bgstyle="studio">Studio</button></div>
+<span class="small dim">Subject direction</span>
+<div class="chips mt" id="rg-subject"><button class="chip on" data-subject="auto">Auto</button><button class="chip" data-subject="face">Face close-up</button><button class="chip" data-subject="character">Character art</button><button class="chip" data-subject="product">Product / object</button><button class="chip" data-subject="none">No person</button></div>
+<span class="small dim">Versions</span>
+<div class="chips mt" id="rg-vers"><button class="chip on" data-vers="1">1</button><button class="chip" data-vers="2">2</button><button class="chip" data-vers="4">4</button></div>
 <div class="btns two">
 <label class="field"><span>Art style</span><select class="input" id="cstyle"><option>Bold gaming</option><option>Clean minimal</option><option>Shocked-face reaction</option><option>Tech / neon</option><option>Study &amp; academic</option><option>Dark cinematic</option></select><span class="small dim">Sets the mood of the AI background art.</span></label>
 <label class="field"><span>Text colour</span><span class="swatches"><button class="sw-c on" data-ink="#ffffff" style="background:#ffffff" aria-label="White"></button><button class="sw-c" data-ink="#ffe46b" style="background:#ffe46b" aria-label="Yellow"></button><button class="sw-c" data-ink="#ff5b4f" style="background:#ff5b4f" aria-label="Red"></button><button class="sw-c" data-ink="#35d685" style="background:#35d685" aria-label="Green"></button><button class="sw-c" data-ink="#4aa8ff" style="background:#4aa8ff" aria-label="Blue"></button></span><span class="small dim">The headline is drawn in this colour with a heavy outline, so it reads at phone size.</span></label>
 </div>
-<h3 class="mt2">Step 3 — Size &amp; create</h3>
+<h3 class="mt2">Step 4 — Size &amp; create</h3>
 <p class="small dim">Use the bar below like Google Flow: tap <b>+</b> to pick the aspect ratio (16:9 for YouTube, 9:16 for Shorts covers), then Create. The file is made at that ratio's exact pixel size.</p>
 <div class="flowbar"><button class="icon-btn" id="plusbtn" aria-label="Choose aspect ratio">＋</button><div class="grow"><b>Aspect ratio: <span id="ratiolabel">16:9</span></b><div class="small dim">Tap + to change it</div></div><button class="btn" id="cgo">Create thumbnail</button></div>
 <div class="ratiopop hidden" id="ratiopop"><div class="chips"><button class="chip" data-ratio="16:9">16:9 · YouTube</button><button class="chip" data-ratio="9:16">9:16 · Shorts</button><button class="chip" data-ratio="1:1">1:1 · Square</button><button class="chip" data-ratio="4:3">4:3 · Classic</button><button class="chip" data-ratio="3:4">3:4 · Portrait</button><button class="chip" data-ratio="1.91:1">1.91:1 · Facebook Ad</button></div></div>
+<div id="cprog"></div>
 <div id="cresult"></div></div>
 </div>
 <div id="panel-redesigner" class="hidden">
@@ -49,6 +62,7 @@
 <div class="chips"><button class="chip" data-ratio="16:9">16:9 · YouTube</button><button class="chip" data-ratio="9:16">9:16 · Shorts</button><button class="chip" data-ratio="1:1">1:1 · Square</button><button class="chip" data-ratio="4:3">4:3 · Classic</button><button class="chip" data-ratio="3:4">3:4 · Portrait</button><button class="chip" data-ratio="1.91:1">1.91:1 · Facebook Ad</button></div>
 <p class="small dim mt">Every version is drawn at this ratio's exact pixel size, with your photo/subject placed inside.</p>
 <button class="btn block big mt" id="makevars">Generate different versions</button>
+<div id="varprog"></div>
 <div id="vars"></div></div>
 </div>
 <section class="guide"><h2>How this tool works</h2>
@@ -57,7 +71,7 @@
 <h2>Tips</h2><ul><li>Keep text to 3–5 words — it must be readable at phone size.</li><li>One face, one emotion, one idea per thumbnail wins clicks.</li><li>Download two versions and A/B test them on YouTube.</li></ul>
 <h2>FAQ</h2><div class="faq"><b>Do the new versions keep my text exactly?</b><p>Yes — the version maker draws the exact text you typed on every version. Only the design changes.</p></div><div class="faq"><b>Can the prompt box really generate an image?</b><p>Yes, when your Gemini key has access to Google's image model, the image is generated and shown here. If not, the AI returns a detailed concept you can build with the version maker.</p></div></section></div>
 <footer class="site-foot"><div class="in">
-<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
 <p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
 <p class="small dim">© 2026 StreamClip AI</p>
 </div></footer>
