@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#12100c">
+<meta name="description" content="Student Mode: turn a long lecture into short revision clips of the key concepts — upload the lecture or let the AI map the concepts from the transcript.">
+<title>Lecture to Revision Clips | StreamClip AI</title>
+<link rel="stylesheet" href="../css/app.css">
+</head>
+<body data-tool="lecture-clips">
+<header class="site-head"><div class="in">
+<a class="logo-badge" href="../index.html" aria-label="StreamClip AI home">S</a>
+<a class="brand-name" href="../index.html">Stream<i>Clip</i> AI</a>
+<nav class="mainnav"><a href="../index.html">Home</a><a href="../index.html#tools">Tools</a><a href="../settings.html">Settings</a><a href="../about.html">About</a><a href="../contact.html">Contact</a></nav>
+</div></header>
+<div class="wrap"><p class="small dim mt"><a href="../index.html">← All tools</a></p>
+<h1 class="mt">Lecture to Revision Clips</h1>
+<p class="sub mt">Student Mode: turn a long lecture into short revision clips of the key concepts — upload the lecture or let the AI map the concepts from the transcript.</p>
+<div id="keyprompt" class="mt"></div>
+<div class="card"><h3>Option A — upload the lecture video</h3>
+<label class="field"><span>Choose the lecture file</span><input class="input" type="file" id="vfile" accept="video/*"></label>
+<div id="stage" class="hidden">
+<div class="vidstage"><video id="vid" controls playsinline></video></div>
+<p class="small dim mt" id="dur"></p>
+<label class="slider"><div class="spread"><span>Concept starts</span><b id="inv">00:00</b></div><input type="range" id="in" min="0" max="10" step="1" value="0"></label>
+<label class="slider"><div class="spread"><span>Concept ends</span><b id="outv">00:00</b></div><input type="range" id="out" min="0" max="10" step="1" value="10"></label>
+<div class="btns two mt"><button class="btn dark" id="playseg">Play this concept</button><button class="btn" id="export">Export clip (WebM)</button></div>
+<p class="small dim mt">Each concept becomes one 30–60 second revision clip. Export one concept at a time.</p></div></div>
+<div class="card"><h3>Option B — let AI map the concepts first</h3>
+<p class="sub">Paste the lecture transcript; the AI lists the key concepts in teaching order, with memory hooks.</p>
+<label class="field"><span>Lecture transcript</span><textarea class="input" id="transcript" placeholder="Paste the lecture transcript here…"></textarea></label>
+<button class="btn dark block mt" id="plan">Find key concepts</button>
+<div id="planresult"></div></div>
+<section class="guide"><h2>How this tool works</h2>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>Fastest path: paste the lecture transcript and tap "Find key concepts" — you get the concept map first.</div></div><div class="stp"><span class="n">2</span><div>Upload the lecture video and use the concept timestamps to set the Start and End sliders.</div></div><div class="stp"><span class="n">3</span><div>Play the concept to check it starts and ends cleanly.</div></div><div class="stp"><span class="n">4</span><div>Export it as a revision clip (WebM), then repeat for the next concept.</div></div><div class="stp"><span class="n">5</span><div>Revise by watching your own 1-minute clips the night before the exam.</div></div></div>
+<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>The lecture video file, or its transcript for the concept map</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A concept-by-concept revision plan with memory hooks</li><li>One short exported clip per concept</li></ul></div></div></div>
+<h2>Tips</h2><ul><li>Name each exported clip with the concept ("Clip 3 — Supply and Demand") so revision stays organised.</li><li>Keep clips under 60 seconds — one concept per clip.</li><li>Make the clips the same day you attend the lecture, while it is fresh.</li></ul>
+<h2>FAQ</h2><div class="faq"><b>Can it take a YouTube lecture link directly?</b><p>Browsers cannot download YouTube videos. Upload the lecture file, or paste the transcript (YouTube → "…" → "Open transcript") for the concept map and cut from your own copy.</p></div><div class="faq"><b>How long should a revision clip be?</b><p>30–60 seconds: one concept, one example, one hook line.</p></div></section></div>
+<footer class="site-foot"><div class="in">
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
+<p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
+<p class="small dim">© 2026 StreamClip AI</p>
+</div></footer>
+<script type="module" src="../js/site.js"></script>
+<script type="module" src="../js/tools.js"></script></body></html>

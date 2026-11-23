@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#12100c">
+<meta name="description" content="Save your own name and logo once, preview them on your video, and export branded frames — your brand on every clip, nobody else's.">
+<title>Your Own Branding | StreamClip AI</title>
+<link rel="stylesheet" href="../css/app.css">
+</head>
+<body data-tool="branding">
+<header class="site-head"><div class="in">
+<a class="logo-badge" href="../index.html" aria-label="StreamClip AI home">S</a>
+<a class="brand-name" href="../index.html">Stream<i>Clip</i> AI</a>
+<nav class="mainnav"><a href="../index.html">Home</a><a href="../index.html#tools">Tools</a><a href="../settings.html">Settings</a><a href="../about.html">About</a><a href="../contact.html">Contact</a></nav>
+</div></header>
+<div class="wrap"><p class="small dim mt"><a href="../index.html">← All tools</a></p>
+<h1 class="mt">Your Own Branding</h1>
+<p class="sub mt">Save your own name and logo once, preview them on your video, and export branded frames — your brand on every clip, nobody else's.</p>
+<div id="keyprompt" class="mt"></div>
+<div class="card"><h3>Your brand</h3>
+<label class="field"><span>Your name / channel name</span><input class="input" id="bname" placeholder="e.g. My Channel"></label>
+<label class="field"><span>Your logo (PNG with transparency is best)</span><input class="input" type="file" id="logofile" accept="image/*"></label>
+<p class="small dim mt">Saved in your browser only. It is applied to your previews below — never uploaded anywhere.</p>
+<label class="field"><span>Upload a video to preview</span><input class="input" type="file" id="bgfile" accept="video/*"></label>
+<div id="bstage" class="hidden"><div class="vidstage"><video id="bvid" controls playsinline></video><img class="blogo" id="blogo" alt=""><span class="bname" id="bnameov"></span></div>
+<button class="btn block mt" id="snap">Download this frame with my branding (PNG)</button>
+<p class="small dim mt">Play the video to any frame, then download it branded — perfect for thumbnails and posts. For full branded video exports, apply the same logo in your editor; this page handles the brand kit and frame exports.</p></div></div>
+<section class="guide"><h2>How this tool works</h2>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>Type your channel name and upload your logo — both are saved in your browser.</div></div><div class="stp"><span class="n">2</span><div>Upload any of your videos: your name appears bottom-left and your logo bottom-right, live on the preview.</div></div><div class="stp"><span class="n">3</span><div>Play to a strong frame and tap the download button to export that frame with your branding burned in.</div></div><div class="stp"><span class="n">4</span><div>Use the same name and logo on every clip so viewers start recognising you.</div></div></div>
+<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your logo file and channel name (saved once, in your browser)</li><li>A video to preview</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A reusable brand kit stored in your browser</li><li>Branded frame exports (PNG) for thumbnails and posts</li></ul></div></div></div>
+<h2>Tips</h2><ul><li>A transparent PNG logo looks professional on any video.</li><li>Keep the name short — it must be readable at phone size.</li><li>Use one consistent logo position across all your videos.</li></ul>
+<h2>FAQ</h2><div class="faq"><b>Is my logo uploaded to a server?</b><p>No. It is stored in your browser's local storage and drawn onto frames on your device.</p></div><div class="faq"><b>Does it brand the full video?</b><p>This page brands frame exports and shows the live overlay preview. Full-length branded rendering needs a video engine; apply the same overlay in the Upload tool's export flow or your editor.</p></div></section></div>
+<footer class="site-foot"><div class="in">
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
+<p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
+<p class="small dim">© 2026 StreamClip AI</p>
+</div></footer>
+<script type="module" src="../js/site.js"></script>
+<script type="module" src="../js/tools.js"></script></body></html>

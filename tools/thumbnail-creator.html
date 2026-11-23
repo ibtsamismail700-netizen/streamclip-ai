@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#12100c">
+<meta name="description" content="Upload a thumbnail — AI analyses it, then generates completely different versions with the same text, plus a prompt chat box to create thumbnails from scratch.">
+<title>Thumbnail Creator / Redesigner | StreamClip AI</title>
+<link rel="stylesheet" href="../css/app.css">
+</head>
+<body data-tool="thumbnail">
+<header class="site-head"><div class="in">
+<a class="logo-badge" href="../index.html" aria-label="StreamClip AI home">S</a>
+<a class="brand-name" href="../index.html">Stream<i>Clip</i> AI</a>
+<nav class="mainnav"><a href="../index.html">Home</a><a href="../index.html#tools">Tools</a><a href="../settings.html">Settings</a><a href="../about.html">About</a><a href="../contact.html">Contact</a></nav>
+</div></header>
+<div class="wrap"><p class="small dim mt"><a href="../index.html">← All tools</a></p>
+<h1 class="mt">Thumbnail Creator / Redesigner</h1>
+<p class="sub mt">Upload a thumbnail — AI analyses it, then generates completely different versions with the same text, plus a prompt chat box to create thumbnails from scratch.</p>
+<div id="keyprompt" class="mt"></div>
+<div class="card"><h3>Redesign an existing thumbnail</h3>
+<label class="field"><span>Upload the thumbnail</span><input class="input" type="file" id="tfile" accept="image/*"></label>
+<img id="tprev" class="prev mt hidden" alt="Uploaded thumbnail">
+<button class="btn dark block mt" id="analyse">Analyse thumbnail</button>
+<div id="aresult"></div>
+<label class="field"><span>The text (kept the SAME on every new version)</span><input class="input" id="ttext" placeholder="e.g. I SURVIVED 100 DAYS!"></label>
+<button class="btn block mt" id="makevars">Generate different versions</button>
+<div id="vars"></div></div>
+<div class="card"><h3>Or create from a prompt</h3>
+<p class="sub">Chat with the AI: describe the thumbnail you want. It generates an image with your key, or gives you a build-ready concept.</p>
+<div class="chatbox"><div class="chatlog" id="chatlog"></div>
+<div class="paste"><input class="input" id="chatin" placeholder="e.g. A shocked gamer, red background, text: IMPOSSIBLE WIN"><button class="btn sm" id="chatsend">Send</button></div></div></div>
+<section class="guide"><h2>How this tool works</h2>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>Upload the thumbnail you want to improve (or skip the upload to start fresh).</div></div><div class="stp"><span class="n">2</span><div>Tap "Analyse thumbnail" — the AI reads the image: its topic, exact text, colours, subject and weak points, and suggests redesign directions.</div></div><div class="stp"><span class="n">3</span><div>Type the text that must stay the same, then tap "Generate different versions".</div></div><div class="stp"><span class="n">4</span><div>You get 4 versions — Bold Yellow, Dark Neon, Red Alert and Clean Mint — each a different layout, background and style, all with your exact text. Download any of them.</div></div><div class="stp"><span class="n">5</span><div>Or use the prompt chat box to generate a thumbnail from a written idea.</div></div></div>
+<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>A thumbnail image (for analysis and redesign)</li><li>The exact text for the new versions</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A designer-level analysis of your thumbnail</li><li>4 ready-to-download versions (1280×720) that look completely different</li><li>AI images or concepts from your own prompts</li></ul></div></div></div>
+<h2>Tips</h2><ul><li>Keep text to 3–5 words — it must be readable at phone size.</li><li>One face, one emotion, one idea per thumbnail wins clicks.</li><li>Download two versions and A/B test them on YouTube.</li></ul>
+<h2>FAQ</h2><div class="faq"><b>Do the new versions keep my text exactly?</b><p>Yes — the version maker draws the exact text you typed on every version. Only the design changes.</p></div><div class="faq"><b>Can the prompt box really generate an image?</b><p>Yes, when your Gemini key has access to Google's image model, the image is generated and shown here. If not, the AI returns a detailed concept you can build with the version maker.</p></div></section></div>
+<footer class="site-foot"><div class="in">
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
+<p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
+<p class="small dim">© 2026 StreamClip AI</p>
+</div></footer>
+<script type="module" src="../js/site.js"></script>
+<script type="module" src="../js/tools.js"></script></body></html>
