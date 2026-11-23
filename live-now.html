@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#12100c">
+<meta name="description" content="See who is live right now in this category on YouTube — then clip the best moments with StreamClip AI.">
+<title>Live right now | StreamClip AI</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="site-head"><div class="in">
+<a class="logo-badge" href="index.html" aria-label="StreamClip AI home">S</a>
+<a class="brand-name" href="index.html">Stream<i>Clip</i> AI</a>
+<nav class="mainnav"><a href="index.html">Home</a><a href="index.html#tools">Tools</a><a href="settings.html">Settings</a><a href="about.html">About</a><a href="contact.html">Contact</a></nav>
+</div></header>
+<div class="wrap">
+<div class="back mt2">
+<a class="icon-btn" href="index.html" aria-label="Back to home"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5L8 12l6.5 7"/></svg></a>
+<div class="t"><h2 id="lntitle">Live now</h2><p class="dim small">Live right now</p></div>
+</div>
+
+<div class="card mt2">
+<div class="spread"><h3 id="lnhead">Live right now</h3><span class="tag live">LIVE</span></div>
+<p class="sub mt">These streams are happening on YouTube right now. StreamClip AI runs fully in your browser — there is no server here pulling YouTube's live list, and this page will not invent one. The button opens YouTube's own live results for <b id="lncat1">this category</b> in a new tab: the real streamers, titles and viewer counts, always current.</p>
+<a class="btn block big mt" id="ytbtn" href="https://www.youtube.com/results?search_query=live" target="_blank" rel="noopener">See who is live on YouTube</a>
+</div>
+
+<div class="card">
+<h3>Found a stream? Clip it</h3>
+<p class="small dim mt">Copy the live stream's link from YouTube, paste it here, and the Stream Clipper will watch it and find its best moments for you.</p>
+<div class="paste mt">
+<input class="input" id="lnlink" placeholder="youtube.com/watch?v=... or twitch.tv/..." autocomplete="off" autocapitalize="off" spellcheck="false">
+<button class="btn dark" id="lnpaste">Paste</button>
+</div>
+<button class="btn dark block mt" id="lnclip">Clip this stream</button>
+</div>
+
+<div class="note"><div><b>Why no stream list on this page?</b><div class="small dim">A static website has no server and no YouTube Data API key, so it cannot fetch YouTube's real-time live list. Rather than showing made-up streamer names or viewer counts, we send you straight to YouTube's live search for <span id="lncat2">this category</span> — then bring the link back here to clip it.</div></div></div>
+</div>
+<footer class="site-foot"><div class="in">
+<div class="cols"><div><h4>Creator tools</h4><a href="tools/stream-clipper.html">Stream Clipper</a><a href="tools/thumbnail-creator.html">Thumbnail Creator</a><a href="tools/upload-video.html">Upload Your Own Video</a><a href="tools/caption-translation.html">Caption Translation</a><a href="tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="tools/your-branding.html">Your Own Branding</a></div><div><h4>Student Mode</h4><a href="tools/lecture-clips.html">Lecture to Revision Clips</a><a href="tools/lecture-notes.html">Lecture to Notes</a><a href="tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="tools/presentation-maker.html">Video Presentation Maker</a></div><div><h4>Site</h4><a href="settings.html">Settings — Add your Gemini key</a><a href="about.html">About</a><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms</a><a href="contact.html">Contact</a></div></div>
+<p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
+<p class="small dim">© 2026 StreamClip AI</p>
+</div></footer>
+<script type="module" src="js/site.js"></script>
+<script type="module" src="js/livenow.js"></script>
+</body></html>

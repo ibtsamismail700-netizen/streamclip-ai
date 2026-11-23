@@ -32,9 +32,9 @@ if (link) {
   });
 }
 
-/* ---------- Live now: categories + search filter ---------- */
-document.querySelectorAll('.cat[data-cat]').forEach(c =>
-  c.addEventListener('click', () => goClipper({ cat: c.dataset.cat })));
+/* ---------- Live now: category cards are plain links to live-now.html
+   (the app opens a per-category "Live right now" results page, not the
+   clipper). Only the Search card is wired here — it filters the grid. */
 const cs = $('catsearch');
 if (cs) {
   $('catsearchcard').addEventListener('click', () => { cs.classList.remove('hidden'); cs.focus(); });

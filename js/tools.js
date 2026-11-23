@@ -5,6 +5,14 @@ import { toast } from './site.js';
 const $ = (id) => document.getElementById(id);
 const tool = document.body.dataset.tool;
 const busy = (btn, on, label) => { btn.disabled = on; btn.innerHTML = on ? '<span class="spin"></span> Working…' : label; };
+// Visible retry progress: when Google rate-limits a call, gemini.js waits
+// and retries — this callback makes the wait VISIBLE on the busy button
+// (and a status line, when the tool has one) instead of a silent spinner.
+const retryNote = (btn, el) => ({ attempt, total }) => {
+  const msg = `Google is busy — retrying (${attempt}/${total})…`;
+  if (btn) btn.innerHTML = `<span class="spin"></span> ${msg}`;
+  if (el) el.textContent = msg;
+};
 const out = (id, html) => { const el = $(id); if (el) el.innerHTML = html; };
 const on = (id, ev, fn) => { const el = $(id); if (el) el.addEventListener(ev, fn); };
 function download(name, content, type) {
@@ -72,7 +80,7 @@ if (tool === 'hooks') {
     try {
       const d = await geminiJson(`You are a viral short-form content strategist. Topic: "${topic}". Platform: ${$('platform').value}. Tone: ${$('tone').value}. Hook style: ${$('hstyle').value}. Language: ${$('hlang').value}.
 Return JSON only: {"hooks":["..."],"titles":["..."],"hashtags":["..."]}
-Give exactly ${n} hooks (3-7 punchy words each, all in the chosen hook style, no emojis), ${Math.max(4, n - 2)} titles (max 60 characters each), ${n} hashtags (no # symbol, single words or short phrases). Write hooks and titles in the chosen language.`);
+Give exactly ${n} hooks (3-7 punchy words each, all in the chosen hook style, no emojis), ${Math.max(4, n - 2)} titles (max 60 characters each), ${n} hashtags (no # symbol, single words or short phrases). Write hooks and titles in the chosen language.`, { onRetry: retryNote(b) });
       const hooks = d.hooks || [], titles = d.titles || [], tags = (d.hashtags || []).map(h => '#' + String(h).replace(/\s+/g, ''));
       out('result', `
         <div class="outcard"><div class="spread"><b>Hooks — say one in the first 2 seconds</b><button class="chip" id="ch">Copy hooks</button></div><ol>${hooks.map(h => `<li>${esc(h)}</li>`).join('')}</ol></div>
@@ -101,7 +109,7 @@ if (tool === 'translate') {
       const parts = [];
       for (let i = 0; i < chunks.length; i++) {
         if (st) st.textContent = chunks.length > 1 ? `Translating part ${i + 1} of ${chunks.length}…` : 'Translating…';
-        parts.push(await geminiText(`Translate these video captions from ${$('sfrom').value} into ${$('lang').value}. Style: ${$('tstyle').value}. Keep every line break and every timestamp exactly as it is. Translate only the spoken words. Do not add explanations, do not wrap in code fences.\n\n${chunks[i]}`, { temperature: 0.3 }));
+        parts.push(await geminiText(`Translate these video captions from ${$('sfrom').value} into ${$('lang').value}. Style: ${$('tstyle').value}. Keep every line break and every timestamp exactly as it is. Translate only the spoken words. Do not add explanations, do not wrap in code fences.\n\n${chunks[i]}`, { temperature: 0.3, onRetry: retryNote(b, st) }));
       }
       const r = parts.join('\n\n');
       if (st) st.textContent = 'Done — translation ready below.';
@@ -124,7 +132,7 @@ if (tool === 'notes') {
     try {
       const d = await geminiJson(`You are a study-notes writer. Detail level: ${$('nlevel').value}. Write the notes in: ${$('nlang').value}. From this lecture transcript, make clean revision notes.
 Return JSON only: {"title":"...","summary":"...","keyPoints":["..."],"definitions":[{"term":"...","meaning":"..."}],"formulas":["..."],"examTraps":["..."],"remember":["..."]}
-Keep points short and exact to the transcript. Transcript:\n${text.slice(0, 30000)}`);
+Keep points short and exact to the transcript. Transcript:\n${text.slice(0, 30000)}`, { onRetry: retryNote(b) });
       const md = `# ${d.title}\n\n## Summary\n${d.summary}\n\n## Key points\n${(d.keyPoints || []).map(p => '- ' + p).join('\n')}\n\n## Definitions\n${(d.definitions || []).map(x => `- **${x.term}**: ${x.meaning}`).join('\n')}\n\n## Formulas & facts\n${(d.formulas || []).map(f => '- ' + f).join('\n')}\n\n## Exam traps\n${(d.examTraps || []).map(f => '- ' + f).join('\n')}\n\n## Remember\n${(d.remember || []).map(r => '- ' + r).join('\n')}`;
       out('result', `<div class="outcard"><h3>${esc(d.title || 'Lecture notes')}</h3>
         <p class="out mt"><b>Summary:</b> ${esc(d.summary || '')}</p>
@@ -152,7 +160,7 @@ if (tool === 'flashcards') {
       const nc = Number($('fccount').value), nq = Number($('fqcount').value);
       const d = await geminiJson(`Make study material from this text. Difficulty: ${$('fdiff').value}. Return JSON only:
 {"flashcards":[{"front":"question or term","back":"answer"}],"quiz":[{"q":"...","options":["a","b","c","d"],"answer":0,"why":"one line"}]}
-Exactly ${nc} flashcards and ${nq} quiz questions. Exact to the text.\n${text.slice(0, 30000)}`);
+Exactly ${nc} flashcards and ${nq} quiz questions. Exact to the text.\n${text.slice(0, 30000)}`, { onRetry: retryNote(b) });
       cards = d.flashcards || []; quizData = d.quiz || []; ci = 0; flipped = false; answered = 0; score = 0;
       out('result', `${cards.length ? `<h3 class="mt2">Flashcards — tap a card to flip</h3><div class="flashcard" id="fc"></div>
         <div class="btns three mt"><button class="btn dark" id="prev">Previous</button><button class="btn dark" id="shuf">Shuffle</button><button class="btn dark" id="next">Next</button></div>
@@ -203,7 +211,7 @@ if (tool === 'presentation') {
     try {
       const d = await geminiJson(`Plan a student class-presentation video. Topic: "${topic}". Extra points from the student: "${$('points').value.trim()}". Slides: ${$('slides').value}. Audience level: ${$('level').value}. Narration language: ${$('plang').value}. Speaking tone: ${$('ptone').value}.
 Return JSON only: {"title":"...","slides":[{"title":"...","bullets":["..."],"narration":"..."}]}
-Narration per slide: 2-4 natural spoken sentences in the chosen language and tone, written to be read aloud by an AI voice. No greetings on every slide.`);
+Narration per slide: 2-4 natural spoken sentences in the chosen language and tone, written to be read aloud by an AI voice. No greetings on every slide.`, { onRetry: retryNote(b) });
       const script = (d.slides || []).map((s, i) => `SLIDE ${i + 1}: ${s.title}\n${s.narration}`).join('\n\n');
       out('result', `<div class="outcard"><h3>${esc(d.title || topic)}</h3><p class="small dim mt">Voice for playback: <b>${esc(vsel ? vsel.value : 'Kore')}</b> (change it above and re-play any slide). Play uses Gemini's AI voice on your key.</p></div>
         ${(d.slides || []).map((s, i) => `<div class="outcard slidecard"><b>Slide ${i + 1} — ${esc(s.title)}</b>
@@ -217,7 +225,7 @@ Narration per slide: 2-4 natural spoken sentences in the chosen language and ton
         const s = (d.slides || [])[i]; if (!s) return;
         try {
           toast('Generating the AI voice…');
-          const blob = await geminiTTS(s.narration, vsel ? vsel.value : 'Kore');
+          const blob = await geminiTTS(s.narration, vsel ? vsel.value : 'Kore', { onRetry: ({ attempt, total }) => { const host = $(`aud-${i}`); if (host) host.textContent = `Google is busy — retrying the voice (${attempt}/${total})…`; } });
           const url = URL.createObjectURL(blob);
           if (dl) { const a = document.createElement('a'); a.href = url; a.download = `slide-${i + 1}-voice.wav`; a.click(); }
           else { const host = $(`aud-${i}`); if (host) host.innerHTML = `<audio controls autoplay src="${url}" style="width:100%"></audio>`; }
@@ -264,7 +272,7 @@ if (tool === 'thumbnail') {
     try {
       const part = await fileToInline(file);
       const d = await geminiPartsJson([part, { text: `Analyse this YouTube thumbnail like a top thumbnail designer. Return JSON only:
-{"topic":"what the video is about","textOnThumbnail":"the EXACT text written on the thumbnail, word for word","subject":"the main subject/face/object","works":["what works, short"],"weak":["what is weak, short"],"directions":["4 redesign directions that look completely different from each other but keep the SAME text"]}` }], { temperature: 0.4 });
+{"topic":"what the video is about","textOnThumbnail":"the EXACT text written on the thumbnail, word for word","subject":"the main subject/face/object","works":["what works, short"],"weak":["what is weak, short"],"directions":["4 redesign directions that look completely different from each other but keep the SAME text"]}` }], { temperature: 0.4, onRetry: retryNote(b) });
       analysisText = d.textOnThumbnail || '';
       if (analysisText && !$('ttext').value.trim()) $('ttext').value = analysisText;
       out('aresult', `<div class="outcard"><b>Analysis</b>
@@ -343,7 +351,7 @@ if (tool === 'thumbnail') {
       const [W, H] = RATIOS[ratio];
       let bg = null;
       try {
-        const url = await geminiImage(`YouTube thumbnail background art, ${$('cstyle').value} style, dramatic, high contrast, no text, no letters, no watermark: ${prompt || head}`, null, ratio);
+        const url = await geminiImage(`YouTube thumbnail background art, ${$('cstyle').value} style, dramatic, high contrast, no text, no letters, no watermark: ${prompt || head}`, null, ratio, { onRetry: retryNote(b) });
         bg = await loadImg(url);
       } catch { /* gradient fallback below */ }
       const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
@@ -452,7 +460,7 @@ if (tool === 'upload' || tool === 'lecture-clips') {
       const isLecture = tool === 'lecture-clips';
       const d = await geminiPartsJson([part, { text: isLecture
         ? `Watch this lecture video. Find the key concepts a student must revise. Return JSON only: {"items":[{"title":"concept name","startSec":0,"endSec":0,"why":"one line: why it matters for the exam","hook":"3-6 word memory hook"}]} Up to 8 concepts, in teaching order. Times in seconds from the video start; each concept 30-60 seconds.`
-        : `Watch this video. Pick the best moments for short vertical clips. Return JSON only: {"items":[{"title":"catchy clip title","startSec":0,"endSec":0,"why":"one line: why this moment works","hook":"3-7 punchy words"}]} Up to 8 moments, best first. Times in seconds from the video start; each moment 15-60 seconds.` }], { temperature: 0.4, timeoutMs: 240000 });
+        : `Watch this video. Pick the best moments for short vertical clips. Return JSON only: {"items":[{"title":"catchy clip title","startSec":0,"endSec":0,"why":"one line: why this moment works","hook":"3-7 punchy words"}]} Up to 8 moments, best first. Times in seconds from the video start; each moment 15-60 seconds.` }], { temperature: 0.4, timeoutMs: 240000, onRetry: retryNote(b) });
       renderPlan(d.items || [], true);
       toast('Gemini watched your video and marked the moments.');
     } catch (err) { toast('AI watch failed: ' + err.message, true); }
@@ -469,7 +477,7 @@ if (tool === 'upload' || tool === 'lecture-clips') {
       const focus = $('focus') ? ` Focus on: ${$('focus').value}.` : '';
       const d = await geminiJson(isLecture
         ? `From this lecture transcript, find the key concepts a student must revise.${focus} Return JSON only: {"items":[{"title":"concept name","at":"timestamp or '—' if none in text","why":"one line: why it matters for the exam","hook":"3-6 word memory hook"}]} Give up to 8 items, in teaching order. Transcript:\n${text.slice(0, 30000)}`
-        : `From this video transcript, pick the best moments for short clips. Return JSON only: {"items":[{"title":"catchy clip title","at":"timestamp or '—' if none in text","why":"one line: why this moment works","hook":"3-7 punchy words"}]} Give up to 8 moments, best first. Transcript:\n${text.slice(0, 30000)}`);
+        : `From this video transcript, pick the best moments for short clips. Return JSON only: {"items":[{"title":"catchy clip title","at":"timestamp or '—' if none in text","why":"one line: why this moment works","hook":"3-7 punchy words"}]} Give up to 8 moments, best first. Transcript:\n${text.slice(0, 30000)}`, { onRetry: retryNote(b) });
       renderPlan(d.items || [], false);
     } catch (err) { toast(err.message, true); }
     busy(b, false, tool === 'lecture-clips' ? 'Find key concepts' : 'Find best moments');
@@ -496,25 +504,16 @@ if (tool === 'upload' || tool === 'lecture-clips') {
 
 /* ---------- Stream Clipper ---------- */
 if (tool === 'clipper') {
-  // Home-page handoff: a link and/or category picked on the home page arrives
-  // as a query param and/or a one-shot localStorage note — land both here.
+  // Home-page handoff: a stream link pasted on the home page (or on the Live
+  // Now page) arrives as a query param and/or a one-shot localStorage note —
+  // land it in the link field here.
   try {
     const qs = new URLSearchParams(location.search);
     let ho = {};
     try { ho = JSON.parse(localStorage.getItem('sc_handoff_v1') || '{}'); } catch {}
     const hLink = qs.get('link') || ho.link || '';
-    const hCat = qs.get('cat') || ho.cat || '';
     localStorage.removeItem('sc_handoff_v1');
-    if (hLink) { $('slink').value = hLink; toast('Link carried over from the home page — tap Find best moments.'); }
-    if (hCat) {
-      const niche = (hCat === 'Just Chatting' || hCat === 'IRL') ? 'Just chatting / IRL' : 'Gaming';
-      $('cniche').value = niche;
-      const note = $('cathandoff');
-      if (note) {
-        note.classList.remove('hidden');
-        note.innerHTML = `<div><b>Category picked on the home page: ${esc(hCat)}</b><div class="small dim">Stream type set to ${esc(niche)}. Paste the stream link above and tap Find best moments.</div></div>`;
-      }
-    }
+    if (hLink) { $('slink').value = hLink; toast('Link carried over — tap Find best moments.'); }
   } catch {}
   const setMode = (m) => {
     $('mode-yt').classList.toggle('on', m === 'yt');
@@ -553,6 +552,7 @@ if (tool === 'clipper') {
     for (const m of found) { m.picked = m.score >= minScore && n < count; if (m.picked) n++; }
   }
   const stepEl = (id, state, text) => { const el = $(id); if (!el) return; el.className = 'step' + (state ? ' ' + state : ''); el.querySelector('span:last-child').textContent = text; };
+  const scanRetry = (id) => ({ attempt, total }) => stepEl(id, 'now', `Google is busy — retrying (${attempt}/${total})…`);
 
   // --- YouTube: Gemini watches the video from its URL, in time windows ---
   on('scan', 'click', async (e) => {
@@ -568,7 +568,7 @@ if (tool === 'clipper') {
     try {
       let durationSec = 0, title = '';
       try {
-        const probe = await geminiYouTubeJson(url, 'Return JSON only: {"durationSec": 0, "title": ""} — durationSec is the total length of this video in seconds (a number), title is its title. If you truly cannot tell the length, use 0.', { timeoutMs: 120000 });
+        const probe = await geminiYouTubeJson(url, 'Return JSON only: {"durationSec": 0, "title": ""} — durationSec is the total length of this video in seconds (a number), title is its title. If you truly cannot tell the length, use 0.', { timeoutMs: 120000, onRetry: scanRetry('st1') });
         durationSec = Number(probe.durationSec) || 0; title = probe.title || '';
       } catch { /* probe is best-effort; windows below still run */ }
       stepEl('st1', 'ok', title ? `Video found: ${title}${durationSec ? ` · ${fmt(durationSec)} long` : ''}` : 'Video accepted by Gemini');
@@ -585,7 +585,7 @@ if (tool === 'clipper') {
           const d = await geminiYouTubeJson(url, `You are a top stream clipper. Watch ONLY the segment of this video you were given (it starts at ${fmt(s)} of the full video). Niche: ${niche}. Clip style: ${style}.
 Find the moments in THIS segment that would make viral Shorts. Return JSON only:
 {"beyondEnd": false, "moments": [{"startSec": 0, "endSec": 0, "score": 0, "title": "...", "hook": "...", "why": "..."}]}
-startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict viral score 0-99. title max 60 chars. hook is 3-7 punchy words. why is one short line. Skip silence, menus, sponsor reads, intros and outros. If this segment is past the end of the video, return {"beyondEnd": true, "moments": []}.`, { startSec: s, endSec: en });
+startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict viral score 0-99. title max 60 chars. hook is 3-7 punchy words. why is one short line. Skip silence, menus, sponsor reads, intros and outros. If this segment is past the end of the video, return {"beyondEnd": true, "moments": []}.`, { startSec: s, endSec: en, onRetry: scanRetry('st2') });
           if (d.beyondEnd) { beyond = true; break; }
           for (const m of (d.moments || [])) {
             const st = s + (parseTs(m.startSec) || 0);
@@ -623,7 +623,7 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
       const chunks = chunkText(text, 9000);
       for (let i = 0; i < chunks.length; i++) {
         if (st) st.textContent = `Scoring part ${i + 1} of ${chunks.length}… (${found.length} moments so far)`;
-        const d = await geminiJson(`You are a top stream clipper. From this part of a stream transcript, pick the moments for viral Shorts. Return JSON only: {"items":[{"title":"catchy, max 60 chars","at":"timestamp as written in the text, or '—'","score":0,"hook":"3-7 punchy words","why":"one short line"}]} Score strictly 0-99. Skip silence, menus, sponsor talk, intros. Transcript part:\n${chunks[i]}`);
+        const d = await geminiJson(`You are a top stream clipper. From this part of a stream transcript, pick the moments for viral Shorts. Return JSON only: {"items":[{"title":"catchy, max 60 chars","at":"timestamp as written in the text, or '—'","score":0,"hook":"3-7 punchy words","why":"one short line"}]} Score strictly 0-99. Skip silence, menus, sponsor talk, intros. Transcript part:\n${chunks[i]}`, { onRetry: retryNote(null, st) });
         for (const m of (d.items || [])) found.push({ startLabel: m.at || '—', score: Math.max(0, Math.min(99, Number(m.score) || 0)), title: m.title || 'Moment', hook: m.hook || '', why: m.why || '', picked: false });
         found.sort((a, b2) => b2.score - a.score);
         renderFound('txmoments', 'txsummary');
