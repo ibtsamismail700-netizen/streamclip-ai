@@ -33,6 +33,22 @@ export const WORK_LINKS = {
   examprep: ['Exam Prep — Questions', 'tools/exam-prep.html'],
   'upload-video': ['Upload Your Own Video', 'tools/upload-video.html'],
   'your-branding': ['Your Branding', 'tools/your-branding.html'],
+  hooktrans: ['Viral Hook Translator', 'tools/viral-hook-translator.html'],
+  dukaan: ['Dukaan Promo Maker', 'tools/dukaan-promo-maker.html'],
+  shayari: ['Shayari / Poetry Video Maker', 'tools/shayari-maker.html'],
+  cricket: ['Cricket Clip Finder', 'tools/cricket-clip-finder.html'],
+  newscard: ['News Card Maker', 'tools/news-card-maker.html'],
+  voicechanger: ['Voice Changer Dub', 'tools/voice-changer-dub.html'],
+  subburner: ['Subtitle Burner Pack', 'tools/subtitle-burner.html'],
+  podposts: ['Podcast-to-Posts', 'tools/podcast-to-posts.html'],
+  ramadankit: ['Ramadan / Eid Content Kit', 'tools/ramadan-eid-kit.html'],
+  blogwriter: ['Blog Writer', 'tools/blog-writer.html'],
+  keywords: ['Keyword Finder', 'tools/keyword-finder.html'],
+  aeocheck: ['AI Answer Checker', 'tools/ai-answer-checker.html'],
+  carousel: ['Carousel Maker', 'tools/carousel-maker.html'],
+  pinmaker: ['Pinterest Pin Maker', 'tools/pin-maker.html'],
+  voicemaker: ['Voice Maker', 'tools/voice-maker.html'],
+  blogreel: ['Blog-to-Reel', 'tools/blog-to-reel.html'],
 };
 export function getWork() { try { const a = JSON.parse(localStorage.getItem(WORK_LS) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } }
 export function saveWork(kind, title, payload) {
@@ -60,6 +76,12 @@ const TOOL_FAMILIES = {
   thumbnail: ['image'], profilepic: ['image'],
   presentation: ['text', 'tts'], scriptshort: ['text', 'image', 'tts'],
   dub: ['text', 'tts'],
+  dukaan: ['text', 'image', 'tts'], shayari: ['text', 'image', 'tts'],
+  voicechanger: ['text', 'tts'], voicemaker: ['tts'],
+  blogreel: ['text', 'image', 'tts'], ramadankit: ['text', 'tts'],
+  carousel: ['text'], pinmaker: ['text', 'image'], podposts: ['text'],
+  cricket: ['text'], hooktrans: ['text'], subburner: ['text'],
+  blogwriter: ['text'], keywords: ['text'], newscard: ['text'],
 };
 const FAMILY_NAMES = { text: 'text & video', image: 'image', tts: 'voice' };
 (function restNotice() {

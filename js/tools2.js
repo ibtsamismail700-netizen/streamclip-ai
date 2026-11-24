@@ -469,21 +469,42 @@ if (tool === 'scriptshort') {
     'Neon cyberpunk': 'neon cyberpunk scene, glowing signs, rain-slick streets, magenta and cyan light',
     'Documentary photo': 'realistic documentary photograph, natural light, candid, gritty detail',
   };
-  on('sgo', 'click', async (e) => {
-    if (!requireKey()) return;
+  /* Script Studio (hooks-first): in Studio mode the first tap generates
+   * 5 hooks for the topic; the visitor picks one; the second tap builds
+   * the full pack with that hook forced as scene 1's exact line. */
+  let studioHook = '';
+  function resetStudio() {
+    studioHook = '';
+    const host = $('shooks'); if (host) host.innerHTML = '';
+    const step = $('studiostep'); if (step) step.classList.add('hidden');
+    const b = $('sgo'); if (b) b.textContent = 'Make my short pack';
+  }
+  on('smode', 'change', () => {
+    resetStudio();
+    if ($('smode').value === 'studio') {
+      const st = $('studiostep'); if (st) st.classList.remove('hidden');
+      const b = $('sgo'); if (b) b.textContent = 'Write 5 hooks first';
+    }
+  });
+  on('sinput', 'input', () => {
+    if ($('smode').value !== 'studio') return;
+    const st = $('studiostep'); if (st) st.classList.remove('hidden');
+    if (studioHook) resetStudio();
+    if ($('smode').value === 'studio') { const st2 = $('studiostep'); if (st2) st2.classList.remove('hidden'); const b = $('sgo'); if (b && !studioHook) b.textContent = 'Write 5 hooks first'; }
+  });
+  async function buildPack(b, forcedHook) {
     const input = $('sinput').value.trim();
-    if (input.length < 8) { toast('Write a topic — or paste your full script — first.', true); return; }
-    const b = e.currentTarget; busy(b, true);
+    busy(b, true);
     const prog = makeProgress($('prog'), ['Writing the script', 'Designing the scenes', 'Creating the images', 'Making the voice', 'Packing it up', 'Ready']);
     const niche = $('sniche').value, lang = $('slang').value, vis = $('svis').value;
     const scenes = Math.max(4, Math.min(10, Math.round(dur / 6.5)));
     const words = Math.round(dur * 2.4);
     try {
-      const d = await geminiJson($('smode').value === 'topic'
+      const d = await geminiJson($('smode').value !== 'script'
         ? `You write viral vertical shorts. Topic: "${input}". Niche/style: ${niche}. Language: ${lang}. Target length: about ${dur} seconds spoken (about ${words} words total).
 Write the script as exactly ${scenes} scenes. Return JSON only:
 {"title":"a posting title, max 70 chars","scenes":[{"line":"one spoken line for this scene","image":"a one-sentence description of the picture for this scene"}],"caption":"a 1-2 line posting caption","hashtags":["..."]}
-Rules: the FIRST line must be a hook that stops the scroll. Lines flow as one story — no greetings, no "in this video". Each line 8-16 words. image descriptions: visual only, no text in the picture, vertical-friendly composition, consistent main character/setting across scenes. hashtags: 5-8, no # symbol. Write title, lines and caption in ${lang}.`
+Rules: ${forcedHook ? `the FIRST line must be exactly this hook, word for word: "${forcedHook}". ` : 'the FIRST line must be a hook that stops the scroll. '}Lines flow as one story — no greetings, no "in this video". Each line 8-16 words. image descriptions: visual only, no text in the picture, vertical-friendly composition, consistent main character/setting across scenes. hashtags: 5-8, no # symbol. Write title, lines and caption in ${lang}.`
         : `You package scripts for vertical shorts. The user wrote this full script — use it AS-IS, do not rewrite the words:
 """${input.slice(0, 6000)}"""
 Split it into exactly ${scenes} scenes at natural sentence breaks. Niche/style: ${niche}. Language of the script: ${lang}. Return JSON only:
@@ -545,7 +566,43 @@ image descriptions: visual only, no text in the picture, vertical-friendly compo
       prog.done();
       toast(`Pack ready — ${made} of ${pack.scenes.length} images, ${vcount} of ${chunks.length} voice parts.`);
     } catch (err) { prog.fail(err.message); toast('Script-to-Short failed: ' + err.message, true); }
-    busy(b, false, 'Make my short pack');
+    busy(b, false, $('smode').value === 'studio' && studioHook ? 'Build the short from this hook' : 'Make my short pack');
+  }
+  on('sgo', 'click', async (e) => {
+    if (!requireKey()) return;
+    const input = $('sinput').value.trim();
+    if (input.length < 8) { toast('Write a topic — or paste your full script — first.', true); return; }
+    const b = e.currentTarget;
+    if ($('smode').value === 'studio' && !studioHook) {
+      // Script Studio, step 1: hooks first — the visitor picks the opener
+      // before a single scene or image is spent on the script.
+      busy(b, true);
+      const prog = makeProgress($('prog'), ['Writing 5 hooks', 'Pick your hook', 'Ready']);
+      try {
+        const d = await geminiJson(`You are a viral hook writer. Topic: "${input}". Niche/style: ${$('sniche').value}. Language: ${$('slang').value}.
+Return JSON only: {"hooks":[{"text":"the hook line, ready to say as the first line of a short","style":"the pattern it uses, e.g. 'Bold claim', 'Open question', 'Number shock', 'Mid-story start', 'Contradiction'"}]}
+Give exactly 5 hooks, each using a DIFFERENT pattern, 5-14 words each, spoken style, no emojis, no hashtags.`, { bulk: true, temperature: 0.85, onRetry: (info) => prog.setStep(0, retryMsg(info)) });
+        const hooks = (d.hooks || []).filter(h => h && h.text);
+        if (!hooks.length) throw new Error('The AI reply held no hooks. Try again.');
+        const host = $('shooks');
+        if (host) {
+          host.innerHTML = `<p class="small dim mt">Tap the hook your short should open with — the whole script is then built from it, with this line as scene 1, word for word:</p>` + hooks.map((h, i) => `<div class="outcard" data-shook="${i}" style="cursor:pointer"><div class="spread"><b>Hook ${i + 1}</b><span class="tag y">${esc(h.style || 'Hook')}</span></div><p class="mt">${esc(h.text)}</p></div>`).join('');
+          host.querySelectorAll('[data-shook]').forEach(card => card.addEventListener('click', () => {
+            studioHook = hooks[Number(card.dataset.shook)].text;
+            host.querySelectorAll('[data-shook]').forEach(c => { c.style.outline = ''; });
+            card.style.outline = '3px solid var(--y2)';
+            b.textContent = 'Build the short from this hook';
+            toast('Hook picked — tap the button to build the full short from it.');
+          }));
+        }
+        const st = $('studiostep'); if (st) st.classList.remove('hidden');
+        prog.setStep(1);
+        prog.done();
+      } catch (err) { prog.fail(err.message); toast(err.message, true); }
+      busy(b, false, 'Write 5 hooks first');
+      return;
+    }
+    await buildPack(b, $('smode').value === 'studio' ? studioHook : null);
   });
 }
 

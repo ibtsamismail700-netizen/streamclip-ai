@@ -187,5 +187,37 @@ console.log('Thumbnail size system');
   check('generation runs snapshot the size (snapSize used ≥3×)', (src.match(/snapSize\(\)/g) || []).length >= 3);
 }
 
+/* ---------------- 6. wave-3 pages & wiring (static) ---------------- */
+console.log('Wave-3 pages & wiring');
+{
+  const NEW_TOOLS = {
+    'viral-hook-translator': 'hooktrans', 'dukaan-promo-maker': 'dukaan', 'shayari-maker': 'shayari',
+    'cricket-clip-finder': 'cricket', 'news-card-maker': 'newscard', 'voice-changer-dub': 'voicechanger',
+    'subtitle-burner': 'subburner', 'podcast-to-posts': 'podposts', 'ramadan-eid-kit': 'ramadankit',
+    'blog-writer': 'blogwriter', 'keyword-finder': 'keywords', 'ai-answer-checker': 'aeocheck',
+    'carousel-maker': 'carousel', 'pin-maker': 'pinmaker', 'voice-maker': 'voicemaker', 'blog-to-reel': 'blogreel',
+  };
+  const t3 = readFileSync(path.join(ROOT, 'js/tools3.js'), 'utf8');
+  for (const [slug, dt] of Object.entries(NEW_TOOLS)) {
+    let html = '';
+    try { html = readFileSync(path.join(ROOT, 'tools', slug + '.html'), 'utf8'); } catch { /* missing */ }
+    check(`${slug} page exists with data-tool="${dt}" and tools3.js`, html.includes(`data-tool="${dt}"`) && html.includes('js/tools3.js'));
+    check(`tools3.js has the '${dt}' block`, t3.includes(`tool === '${dt}'`));
+    check(`${slug} footer carries the Blog & growth column`, html.includes('Blog &amp; growth') && html.includes('tools/blog-writer.html'));
+  }
+  const idx = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  check('homepage says 38 free tools', idx.includes('38 free tools'));
+  const hrefs = [...idx.matchAll(/class="toolcard" href="([^"]+)"/g)].map(m => m[1].split('#')[0]);
+  const missing = hrefs.filter(h => { try { readFileSync(path.join(ROOT, h)); return false; } catch { return true; } });
+  check('every homepage toolcard link resolves to a file', missing.length === 0, `missing: ${missing.join(', ')}`);
+  const sm = readFileSync(path.join(ROOT, 'sitemap.xml'), 'utf8');
+  check('sitemap lists every new tool', Object.keys(NEW_TOOLS).every(s => sm.includes(`/tools/${s}<`)));
+  const t2 = readFileSync(path.join(ROOT, 'js/tools2.js'), 'utf8');
+  check('Script Studio hooks-first flow is wired', t2.includes('buildPack') && t2.includes('studioHook') && t2.includes("value === 'studio'"));
+  const t1 = readFileSync(path.join(ROOT, 'js/tools.js'), 'utf8');
+  check('Clipper Earn mode + used-moments memory + cut-the-pauses are wired',
+    t1.includes('sc_used_moments_v1') && t1.includes('earnMode') && t1.includes('cutPauses') && t1.includes('Pauses to cut'));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

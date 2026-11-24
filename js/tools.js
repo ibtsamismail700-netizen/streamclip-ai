@@ -431,6 +431,11 @@ if (tool === 'hooks') {
   }
   const savedPack = workFor('hooks');
   if (savedPack && savedPack.payload && Array.isArray(savedPack.payload.hooks)) { rounds = [{ ...savedPack.payload, restored: true, t: savedPack.t }]; renderRounds(); }
+  // Handoff: Keyword Finder's "Use in a title" arrives as ?topic=…
+  try {
+    const qt = new URLSearchParams(location.search).get('topic');
+    if (qt && $('topic') && !$('topic').value) { $('topic').value = qt; toast('Keyword filled in — tap Generate.'); }
+  } catch {}
   on('go', 'click', async (e) => {
     if (!requireKey()) return;
     const topic = $('topic').value.trim();
@@ -1482,6 +1487,9 @@ if (tool === 'clipper') {
   let durationSec = 0, probedId = '';
   let scanRange = 'whole', shortLen = 45, pickCount = 3, voiceMode = 'none', quality = '1080p';
   let scannedRanges = [], scannedUrl = '';
+  // Earn mode (Rewards-style: 1-min+ moments + per-video used memory) and
+  // Cut the pauses (silences inside a moment noted as cut points).
+  let earnMode = false, cutPauses = false;
 
   const ytId = (u) => { const m = String(u || '').match(/(?:youtube\.com\/(?:watch\?[^#]*v=|live\/|shorts\/)|youtu\.be\/)([\w-]{6,})/); return m ? m[1] : ''; };
   const fmtWatching = (n) => {
@@ -1558,6 +1566,32 @@ if (tool === 'clipper') {
   wireChips('rg-count', 'count', v => { pickCount = Number(v); });
   wireChips('rg-voice', 'voice', v => { voiceMode = v; if (found.length) renderFound(); });
   wireChips('rg-quality', 'q', v => { quality = v; if (found.length) renderFound(); });
+  wireChips('rg-goal', 'goal', v => {
+    earnMode = v === 'earn';
+    const en = $('earnnote'); if (en) en.classList.toggle('hidden', !earnMode);
+    if (found.length) renderFound();
+  });
+  on('cpauses', 'change', () => { cutPauses = $('cpauses').checked; });
+
+  /* ----- used-moments memory (Earn mode) -----
+   * Per-video record, on this device only, of the moments already planned
+   * from a video — so a rescan never re-suggests the same part twice.
+   * A moment counts as used when it overlaps a planned range. */
+  const USED_LS = 'sc_used_moments_v1';
+  function loadUsed() { try { const o = JSON.parse(localStorage.getItem(USED_LS) || '{}'); return o && typeof o === 'object' ? o : {}; } catch { return {}; } }
+  function usedAt(id, s, e) {
+    if (!id || s == null) return false;
+    const list = loadUsed()[id] || [];
+    return list.some(([a, b2]) => s < b2 && (e == null || e > a));
+  }
+  function markUsed(picks) {
+    if (!videoId) return;
+    const all = loadUsed();
+    const list = all[videoId] || [];
+    for (const m of picks) if (m.startSec != null) list.push([Math.floor(m.startSec), Math.ceil(m.endSec != null ? m.endSec : m.startSec + 30)]);
+    all[videoId] = list.slice(-200);
+    try { localStorage.setItem(USED_LS, JSON.stringify(all)); } catch { /* storage full/blocked — the memory is a nicety, not a promise */ }
+  }
 
   // Handoff: a stream link from the home hero or a Live Now card arrives as a
   // query param and/or a one-shot localStorage note (which can also carry the
@@ -1595,6 +1629,8 @@ if (tool === 'clipper') {
       <div class="score${m.score < 70 ? ' mid' : ''}">${esc(String(m.score))}</div>
       <p class="why">${esc(m.why || '')}</p>
       <p class="why"><span class="tag y">Hook</span> ${esc(m.hook || '')}</p>
+      ${mode === 'yt' && usedAt(videoId, m.startSec, m.endSec) ? `<p class="why"><span class="tag">Used in an earlier plan</span> — this part of the video is in your used-moments memory, so it is not pre-picked again.</p>` : ''}
+      ${(m.pauses && m.pauses.length) ? `<p class="why"><span class="tag y">Pauses to cut</span> ${m.pauses.map(p => `${fmt(p.startSec)}–${fmt(p.endSec)}`).join(', ')}</p>` : ''}
       ${wu ? `<p class="why"><a href="${wu}" target="_blank" rel="noopener">▶ Watch this scene</a> — verify it in the stream at ${esc(fmt(m.startSec))}.</p>` : ''}
       <div class="acts"><button class="chip pickbtn${m.picked ? ' on' : ''}" data-pick="${i}">${m.picked ? '✓ Picked' : 'Pick'}</button>${m.picked ? `<button class="chip" data-edit="${i}">Open editor</button>` : ''}${voiceMode !== 'none' && m.picked ? `<button class="chip" data-voice="${i}">${voiceMode === 'hook' ? 'Make hook voice' : 'Make story voice'}</button>` : ''}</div>
       ${m.voiceScript ? `<p class="why"><b>Voice line:</b> ${esc(m.voiceScript)}</p>` : ''}
@@ -1630,6 +1666,7 @@ if (tool === 'clipper') {
       quality,
       hook: b.hookText || m.hook || '',
       cut: (b.cutStart != null && b.cutEnd != null) ? `${fmt(b.cutStart)} – ${fmt(b.cutEnd)}` : timeLine(m),
+      pauses: (m.pauses || []).map(p => `${fmt(p.startSec)}–${fmt(p.endSec)}`).join(', '),
       frame: b.frameMode ? `${b.frameMode === 'fill' ? 'Fill the screen' : 'Show all, blurred sides'} · zoom ${Number(b.zoom || 1).toFixed(2)}x · position ${b.fx != null ? b.fx : 50}% / ${b.fy != null ? b.fy : 50}%` : 'Show all, blurred sides (default)',
       captions: b.capOn === false ? 'Off' : `${CAP_NAMES[b.capStyle] || 'Bold'} · ${CAP_NAMES[b.capFont] || 'Poppins'} · ${b.capSize || 100}%`,
       voice: m.voiceScript || b.voiceText || 'None',
@@ -1644,18 +1681,26 @@ if (tool === 'clipper') {
     const head = `# StreamClip AI — shorts production plan\nThis is the production plan for your shorts — not a video file. The Watch links open each scene on YouTube.\n\n`;
     return head + picks.map((m, i) => {
       const br = momentBrief(m);
-      return `## Short ${i + 1}: ${br.title}\n- Time: ${br.time} (score ${br.score})\n- Quality: ${br.quality}\n- Watch this scene: ${br.watch || '—'}\n- Cut: ${br.cut}\n- Hook: ${br.hook || '—'}\n- Frame: ${br.frame}\n- Captions: ${br.captions}\n- Voice: ${br.voice} (${br.voiceVolumes})\n- Music: ${br.music}\n- Top text: ${br.topText}\n- Overlays: ${br.overlays.join('; ') || 'none'}\n- Posting caption: ${br.postCaption || '—'}`;
+      return `## Short ${i + 1}: ${br.title}\n- Time: ${br.time} (score ${br.score})\n- Quality: ${br.quality}\n- Watch this scene: ${br.watch || '—'}\n- Cut: ${br.cut}${br.pauses ? `\n- Pauses to cut: ${br.pauses}` : ''}\n- Hook: ${br.hook || '—'}\n- Frame: ${br.frame}\n- Captions: ${br.captions}\n- Voice: ${br.voice} (${br.voiceVolumes})\n- Music: ${br.music}\n- Top text: ${br.topText}\n- Overlays: ${br.overlays.join('; ') || 'none'}\n- Posting caption: ${br.postCaption || '—'}`;
     }).join('\n\n');
   }
   function renderBrief() {
+    const host0 = $('briefhost'); if (!host0) return;
+    const picks0 = found.filter(m => m.picked);
+    if (!picks0.length) { host0.innerHTML = '<div class="outcard mt"><b>No moments picked.</b><p class="small dim mt">Pick at least one moment above first.</p></div>'; return; }
+    // Planned moments enter the used-moments memory (this device, per
+    // video): a later scan of the same video will tag them instead of
+    // pre-picking them again. Re-render first so the cards show the tag,
+    // then fill the fresh brief host.
+    markUsed(picks0);
+    renderFound();
     const host = $('briefhost'); if (!host) return;
     const picks = found.filter(m => m.picked);
-    if (!picks.length) { host.innerHTML = '<div class="outcard mt"><b>No moments picked.</b><p class="small dim mt">Pick at least one moment above first.</p></div>'; return; }
     host.innerHTML = `<h3 class="mt2">Your shorts plan — ${picks.length} picked</h3>` + picks.map((m) => {
       const br = momentBrief(m);
       return `<div class="outcard"><div class="spread"><b>${esc(br.title)}</b><span class="tag y">${esc(br.time)}</span></div>
       <p class="small dim mt">Score ${br.score}${br.watch ? ` · <a href="${br.watch}" target="_blank" rel="noopener">▶ Watch this scene</a>` : ''}</p>
-      <p class="small mt"><b>Cut:</b> ${esc(br.cut)}<br><b>Quality:</b> ${esc(br.quality)}<br><b>Hook:</b> ${esc(br.hook || '—')}<br><b>Frame:</b> ${esc(br.frame)}<br><b>Captions:</b> ${esc(br.captions)}<br><b>Voice:</b> ${esc(br.voice)} (${esc(br.voiceVolumes)})<br><b>Music:</b> ${esc(br.music)}<br><b>Top text:</b> ${esc(br.topText)}${br.overlays.length ? `<br><b>Overlays:</b> ${esc(br.overlays.join('; '))}` : ''}${br.postCaption ? `<br><b>Posting caption:</b> ${esc(br.postCaption)}` : ''}</p>
+      <p class="small mt"><b>Cut:</b> ${esc(br.cut)}<br>${br.pauses ? `<b>Pauses to cut:</b> ${esc(br.pauses)}<br>` : ''}<b>Quality:</b> ${esc(br.quality)}<br><b>Hook:</b> ${esc(br.hook || '—')}<br><b>Frame:</b> ${esc(br.frame)}<br><b>Captions:</b> ${esc(br.captions)}<br><b>Voice:</b> ${esc(br.voice)} (${esc(br.voiceVolumes)})<br><b>Music:</b> ${esc(br.music)}<br><b>Top text:</b> ${esc(br.topText)}${br.overlays.length ? `<br><b>Overlays:</b> ${esc(br.overlays.join('; '))}` : ''}${br.postCaption ? `<br><b>Posting caption:</b> ${esc(br.postCaption)}` : ''}</p>
       <button class="chip mt" data-editb="${found.indexOf(m)}">Open editor</button></div>`;
     }).join('') +
       `<div class="note mt"><div><b>Render queue.</b><div class="small dim">These briefs are saved for the render engine — the final downloadable videos are queued, not rendered here, because this website does not run a render engine yet. Nothing above fakes a finished file.</div><div class="small dim mt">This is the production plan for your shorts — not a video file. The Watch links open each scene on YouTube.</div></div></div>
@@ -1668,7 +1713,13 @@ if (tool === 'clipper') {
   function finishPick(count, minScore) {
     found.sort((a, b) => b.score - a.score);
     let n = 0;
-    for (const m of found) { m.picked = m.score >= minScore && n < count; if (m.picked) n++; }
+    for (const m of found) {
+      // Earn mode (YouTube scans): only 1-min+ moments, and never a moment
+      // already planned from this video — the used-moments memory.
+      const earnOk = !(earnMode && mode === 'yt') || ((m.endSec == null || m.endSec - m.startSec >= 61) && !usedAt(videoId, m.startSec, m.endSec));
+      m.picked = earnOk && m.score >= minScore && n < count;
+      if (m.picked) n++;
+    }
   }
   async function genVoice(m) {
     if (!m || !requireKey()) return;
@@ -1702,10 +1753,10 @@ if (tool === 'clipper') {
   /* ----- YouTube scan: Gemini watches the video in time windows ----- */
   async function scanWindow(url, s, en) {
     const niche = $('cniche').value, style = $('cstyle').value;
-    return geminiYouTubeJson(url, `You are a top stream clipper. Watch ONLY the segment of this video you were given (it starts at ${fmt(s)} of the full video). Niche: ${niche}. Clip style: ${style}. Aim for moments about ${shortLen} seconds long.
+    return geminiYouTubeJson(url, `You are a top stream clipper. Watch ONLY the segment of this video you were given (it starts at ${fmt(s)} of the full video). Niche: ${niche}. Clip style: ${style}. ${earnMode ? 'EARN MODE: return ONLY moments at least 61 seconds long (aim for 70-150 seconds) — the length TikTok Creator Rewards asks for. A shorter moment must be dropped, however good it is.' : `Aim for moments about ${shortLen} seconds long.`}
 Find the moments in THIS segment that would make viral Shorts. Return JSON only:
-{"beyondEnd": false, "moments": [{"startSec": 0, "endSec": 0, "score": 0, "title": "...", "hook": "...", "why": "..."}]}
-startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict viral score 0-99. title max 60 chars. hook is 3-7 punchy words. why is one short line. Skip silence, menus, sponsor reads, intros and outros. If this segment is past the end of the video, return {"beyondEnd": true, "moments": []}.`, { startSec: s, endSec: en, onRetry: scanRetry('st2') });
+{"beyondEnd": false, "moments": [{"startSec": 0, "endSec": 0, "score": 0, "title": "...", "hook": "...", "why": "...", "pauses": []}]}
+startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict viral score 0-99. title max 60 chars. hook is 3-7 punchy words. why is one short line. ${cutPauses ? 'PAUSES: in each moment\'s "pauses" array, list the silences longer than 2 seconds INSIDE that moment as {"startSec": 0, "endSec": 0} (also segment-relative) — these will be cut out. Empty array if there are none.' : '"pauses" is always an empty array.'} Skip silence, menus, sponsor reads, intros and outros. If this segment is past the end of the video, return {"beyondEnd": true, "moments": []}.`, { startSec: s, endSec: en, onRetry: scanRetry('st2') });
   }
   function addMoments(list, base) {
     let added = 0, dropped = 0;
@@ -1716,7 +1767,8 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
       // end; clamp the end to the known duration.
       if (durationSec > 0 && st >= durationSec) { dropped++; continue; }
       if (durationSec > 0 && en != null && en > durationSec) en = durationSec;
-      found.push({ startSec: st, endSec: en, startLabel: `${fmt(st)}${en != null ? ' – ' + fmt(en) : ''}`, score: Math.max(0, Math.min(99, Number(m.score) || 0)), title: m.title || 'Moment', hook: m.hook || '', why: m.why || '', picked: false });
+      const pauses = (Array.isArray(m.pauses) ? m.pauses : []).map(p => ({ startSec: base + (parseTs(p.startSec) || 0), endSec: base + (parseTs(p.endSec) || 0) })).filter(p => p.endSec > p.startSec);
+      found.push({ startSec: st, endSec: en, startLabel: `${fmt(st)}${en != null ? ' – ' + fmt(en) : ''}`, score: Math.max(0, Math.min(99, Number(m.score) || 0)), title: m.title || 'Moment', hook: m.hook || '', why: m.why || '', picked: false, pauses });
       added++;
     }
     return { added, dropped };
@@ -1974,22 +2026,10 @@ Up to 8 sections, in the material's own order. This is a document, not a video �
 /* ---------- Exam Prep: exam questions + revision sheet + ask your lecture ---------- */
 if (tool === 'examprep') {
   /* ----- Exam questions — practice for your test ----- */
-  on('eqgo', 'click', async (e) => {
-    if (!requireKey() || !requireSource()) return;
-    const b = e.currentTarget; busy(b, true);
-    const prog = makeProgress($('prog'), ['Reading your material', 'Writing MCQs', 'Writing short & long questions', 'Ready']);
-    prog.setStep(1);
-    try {
-      const total = Number($('eqcount').value);
-      const longN = total >= 20 ? 3 : 2;
-      const mcqN = Math.round(total / 2);
-      const shortN = total - mcqN - longN;
-      const d = await sourceJson(`Make practice EXAM questions from the attached lecture material ONLY. Difficulty: ${$('eqdiff').value}. Return JSON only:
-{"mcqs":[{"q":"...","options":["a","b","c","d"],"answer":0,"why":"one line"}],"short":[{"q":"...","answer":"model answer, 3-5 lines"}],"long":[{"q":"...","outline":["main point","..."]}]}
-Exactly ${mcqN} MCQs, ${shortN} short questions and ${longN} long/essay questions. Questions must test real understanding of THIS material — invent nothing that is not in it. Mix the topics across the whole material, in its own order.`, { temperature: 0.55, onRetry: retryNote(b) });
+  function renderEqResult(d, restoredNote) {
       const mcqs = d.mcqs || [], shorts = d.short || [], longs = d.long || [];
       const letters = ['A', 'B', 'C', 'D', 'E'];
-      out('eqresult', `
+      out('eqresult', `${restoredNote ? `<p class="small dim mt">${restoredNote}</p>` : ''}
       ${mcqs.length ? `<h3 class="mt2">MCQs — choose in your head, then reveal</h3>${mcqs.map((q, i) => `<div class="outcard"><b>Q${i + 1}. ${esc(q.q)}</b>
         <ul class="mt">${(q.options || []).map((o, oi) => `<li><b>${letters[oi] || oi + 1}.</b> ${esc(o)}</li>`).join('')}</ul>
         <button class="chip mt" data-reveal>Show answer</button>
@@ -2015,6 +2055,24 @@ Exactly ${mcqN} MCQs, ${shortN} short questions and ${longN} long/essay question
           ...longs.map((q, i) => `## Long ${i + 1}. ${q.q}\n**Outline:**\n${(q.outline || []).map(o => `- ${o}`).join('\n')}`)].join('\n\n');
         download('exam-questions.md', md, 'text/markdown');
       });
+  }
+  const savedEq = workFor('examprep');
+  if (savedEq && savedEq.payload && savedEq.payload.d) renderEqResult(savedEq.payload.d, `Restored — your last question set (${new Date(savedEq.t).toLocaleString()}).`);
+  on('eqgo', 'click', async (e) => {
+    if (!requireKey() || !requireSource()) return;
+    const b = e.currentTarget; busy(b, true);
+    const prog = makeProgress($('prog'), ['Reading your material', 'Writing MCQs', 'Writing short & long questions', 'Ready']);
+    prog.setStep(1);
+    try {
+      const total = Number($('eqcount').value);
+      const longN = total >= 20 ? 3 : 2;
+      const mcqN = Math.round(total / 2);
+      const shortN = total - mcqN - longN;
+      const d = await sourceJson(`Make practice EXAM questions from the attached lecture material ONLY. Difficulty: ${$('eqdiff').value}. Return JSON only:
+{"mcqs":[{"q":"...","options":["a","b","c","d"],"answer":0,"why":"one line"}],"short":[{"q":"...","answer":"model answer, 3-5 lines"}],"long":[{"q":"...","outline":["main point","..."]}]}
+Exactly ${mcqN} MCQs, ${shortN} short questions and ${longN} long/essay questions. Questions must test real understanding of THIS material — invent nothing that is not in it. Mix the topics across the whole material, in its own order.`, { temperature: 0.55, onRetry: retryNote(b) });
+      renderEqResult(d);
+      saveWork('examprep', 'Exam questions', { d });
       prog.done();
     } catch (err) { prog.fail(err.message); toast('Exam questions failed: ' + err.message, true); }
     busy(b, false, 'Make exam questions');
