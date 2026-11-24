@@ -106,18 +106,36 @@ function renderStreams(streams) {
   }
 }
 
-(async () => {
+async function loadLive() {
   if (!slug) { showFallback(); return; }
+  loadingEl.hidden = false;
+  listEl.hidden = true;
+  fallbackEl.hidden = true;
   try {
-    const r = await fetch(`/api/live?cat=${encodeURIComponent(slug)}`);
+    // Bounded wait: a hung function must fall back to the honest YouTube
+    // search design, not spin forever.
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 12000);
+    let r;
+    try { r = await fetch(`/api/live?cat=${encodeURIComponent(slug)}`, { signal: ctl.signal }); }
+    finally { clearTimeout(timer); }
     if (!r.ok) throw new Error(`api ${r.status}`);
     const d = await r.json();
     if (!d || !Array.isArray(d.streams) || !d.streams.length) throw new Error('no streams');
     renderStreams(d.streams);
     loadingEl.hidden = true;
     listEl.hidden = false;
+    const fresh = $('lnfresh');
+    if (fresh) {
+      const clock = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      fresh.innerHTML = `Live list fetched at ${clock} · <button class="chip" id="lnrefresh" type="button">Refresh</button>`;
+      fresh.classList.remove('hidden');
+      const rb = $('lnrefresh');
+      if (rb) rb.addEventListener('click', loadLive);
+    }
   } catch { showFallback(); }
-})();
+}
+loadLive();
 
 /* ---------- paste a stream link -> Stream Clipper (same handoff as home) ---------- */
 const link = $('lnlink');

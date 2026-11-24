@@ -153,19 +153,19 @@ export const saveKeys = (keys) => localStorage.setItem(KEY_STORE, JSON.stringify
 export const addKey = (k) => { const ks = getKeys(); if (!ks.includes(k)) ks.push(k); saveKeys(ks); };
 export const removeKey = (i) => { const ks = getKeys(); ks.splice(i, 1); saveKeys(ks); };
 
-export function requireKey() {
+export function requireKey(opts = {}) {
   if (hasKey()) return true;
   const host = document.getElementById('keyprompt');
   if (host) {
     host.innerHTML = `<div class="note">${'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3L20 3M17 6l3 3M14 9l2 2"/></svg>'}
       <div><b>Add your Gemini key first</b><div class="small dim">This tool runs on your own free Gemini key. Add it once in Settings — it stays in your browser and goes only to Google.</div>
       <a class="btn sm mt" href="${rootPath()}settings.html">Add your Gemini key</a></div></div>`;
-    host.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (opts.scroll !== false) host.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
   return false;
 }
 export function rootPath() {
-  return location.pathname.includes('/tools/') ? '../' : '';
+  return (location.pathname.includes('/tools/') || location.pathname.includes('/blog/')) ? '../' : '';
 }
 
 async function callOnce(model, key, body, timeoutMs = 60000) {
@@ -292,6 +292,81 @@ export function getKeyRestInfo() {
   });
 }
 
+/* ---------------- Activity log (Settings) ----------------
+ * The last ~20 real failures the tools hit on THIS device — tool, time,
+ * and Google's own message — kept in localStorage so the user can see
+ * (and copy) exactly what went wrong instead of "it didn't work". The
+ * gemini layer's failure paths record here; nothing leaves the browser. */
+const ACTIVITY_STORE = 'sc_activity_v1';
+const currentToolName = () => { try { return document.body?.dataset?.tool || ''; } catch { return ''; } };
+export function logActivity(toolName, message) {
+  try {
+    const arr = JSON.parse(localStorage.getItem(ACTIVITY_STORE) || '[]');
+    arr.unshift({ t: Date.now(), tool: String(toolName || ''), msg: String(message || '').slice(0, 300) });
+    localStorage.setItem(ACTIVITY_STORE, JSON.stringify(arr.slice(0, 20)));
+  } catch { /* storage is best-effort */ }
+}
+export const getActivity = () => { try { const a = JSON.parse(localStorage.getItem(ACTIVITY_STORE) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } };
+export const clearActivity = () => { try { localStorage.removeItem(ACTIVITY_STORE); } catch { /* ignore */ } };
+
+/**
+ * Is a whole model family ('text' | 'parts' | 'bulk' | 'image' | 'tts')
+ * unusable right now — i.e. is EVERY (key, model) pair for it cooling
+ * after a rate-limit hit? Returns { resting, until } where `until` is
+ * when the soonest pair can answer again. Used by the tool pages' slim
+ * "limits are resting" notice and by the Settings key test.
+ */
+export async function familyRestInfo(kind) {
+  const keys = getKeys();
+  if (!keys.length) return { resting: false, until: 0 };
+  const models = await modelsFor(keys, kind);
+  if (!models.length) return { resting: false, until: 0 };
+  loadCooldowns();
+  let earliest = Infinity;
+  for (const model of models) for (const key of keys) {
+    const left = cooldownLeft(key, model);
+    if (left <= 0) return { resting: false, until: 0 };
+    if (left < earliest) earliest = left;
+  }
+  return { resting: true, until: Date.now() + earliest };
+}
+
+/**
+ * Settings "Test my key": ONE tiny real call per family (text, image,
+ * TTS) against the first key's resolved models. Reports per family:
+ * { state:'working', model } / { state:'resting', until } /
+ * { state:'error', model, message } with Google's real message. This is
+ * a deliberate, user-pressed test — the key SAVE stays instant and
+ * check-free, exactly as before.
+ */
+export async function testKeyFamilies() {
+  const keys = getKeys();
+  if (!keys.length) return null;
+  const key = keys[0];
+  const probe = async (kind, makeBody, timeoutMs, hasPayload) => {
+    const rest = await familyRestInfo(kind);
+    if (rest.resting) return { state: 'resting', until: rest.until };
+    const models = await modelsFor([key], kind);
+    const model = models[0];
+    if (!model) return { state: 'error', message: 'No model of this kind is available on your key.' };
+    try {
+      const d = await callOnce(model, key, makeBody(), timeoutMs);
+      if (!hasPayload(d)) return { state: 'error', model, message: noImageReason(d) };
+      return { state: 'working', model };
+    } catch (e) {
+      if (isRateLimit(e) || isQuotaError(e)) { const ms = cooldownMsFor(e); markCooldown(key, model, ms); return { state: 'resting', until: Date.now() + ms, message: e.message }; }
+      return { state: 'error', model, message: e.message };
+    }
+  };
+  const textOf = (d) => (d?.candidates?.[0]?.content?.parts || []).some(p => (p.text || '').trim());
+  const mediaOf = (d) => (d?.candidates?.[0]?.content?.parts || []).some(p => p.inlineData?.data);
+  const out = {};
+  out.text = await probe('text', () => ({ contents: [{ role: 'user', parts: [{ text: 'Reply with the single word: ok' }] }] }), 30000, textOf);
+  out.image = await probe('image', () => ({ contents: [{ role: 'user', parts: [{ text: 'A small plain red circle centred on a white background. Minimal test image.' }] }], generationConfig: { responseModalities: ['IMAGE'] } }), 60000, mediaOf);
+  out.tts = await probe('tts', () => ({ contents: [{ role: 'user', parts: [{ text: 'ok' }] }], generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } } } }), 60000, mediaOf);
+  return out;
+}
+
 /** A quota / rate-limit failure, however Google phrases it. */
 const isQuotaError = (e) => !!e && (e.status === 429 || e.body?.error?.status === 'RESOURCE_EXHAUSTED' || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(e.message || ''));
 /* A DAILY quota is a different beast from a per-minute one: the key is
@@ -408,7 +483,9 @@ async function callWithRotation({ models, keys, timeoutMs = ATTEMPT_TIMEOUT_MS, 
           // The soonest reset is beyond the honest wait cap. Say which
           // limit it really is: this call's own quota error when there is
           // one, else a pair resting for many hours means today's quota.
-          throw limitErrorFor(rateError || last, earliestRestMs(resting) > 10 * 60 * 1000);
+          const le = limitErrorFor(rateError || last, earliestRestMs(resting) > 10 * 60 * 1000);
+          logActivity(currentToolName(), le.message + (le.googleMessage ? ` (Google: ${le.googleMessage})` : ''));
+          throw le;
         }
         deadline += waited; // the wait is not part of the attempt budget
         continue;
@@ -426,6 +503,7 @@ async function callWithRotation({ models, keys, timeoutMs = ATTEMPT_TIMEOUT_MS, 
         tried.add(pairId(key, model));
       } catch (e) {
         if (stopOnInvalidKey && e.status === 400 && /API key not valid/i.test(e.message)) {
+          logActivity(currentToolName(), 'Google did not accept your Gemini key. Check it in Settings.');
           throw new Error('Google did not accept your Gemini key. Check it in Settings.');
         }
         if (isRetiredModel(e)) {
@@ -458,14 +536,17 @@ async function callWithRotation({ models, keys, timeoutMs = ATTEMPT_TIMEOUT_MS, 
     if (rested && Date.now() >= deadline) break;
   }
   if (last) {
-    if (isRateLimit(last) || isQuotaError(last)) throw limitErrorFor(last);
-    if (last.name === 'AbortError') throw new Error('Google took too long to answer. Check your connection and try again.');
+    if (isRateLimit(last) || isQuotaError(last)) { const le = limitErrorFor(last); logActivity(currentToolName(), le.message + (le.googleMessage ? ` (Google: ${le.googleMessage})` : '')); throw le; }
+    if (last.name === 'AbortError') { logActivity(currentToolName(), 'Google took too long to answer.'); throw new Error('Google took too long to answer. Check your connection and try again.'); }
+    logActivity(currentToolName(), `${failPrefix}: ${last.message}`);
     throw new Error(`${failPrefix}: ${last.message}`);
   }
   if (retiredError) {
     // Every model we tried was retired/unavailable for this key.
+    logActivity(currentToolName(), 'The models on your Gemini key are not available right now.');
     throw new Error('The models on your Gemini key are not available right now. Open Settings and refresh the model list, or add another key.');
   }
+  logActivity(currentToolName(), emptyMessage);
   throw new Error(emptyMessage);
 }
 
@@ -602,6 +683,7 @@ export async function geminiImage(prompt, imagePart = null, aspectRatio = null, 
           soft = noImageReason(d); // HTTP 200 but no image — record why, try the next combo
         } catch (e) {
           if (e.status === 400 && /API key not valid/i.test(e.message)) {
+            logActivity(currentToolName(), 'Google did not accept your Gemini key. Check it in Settings.');
             throw new Error('Google did not accept your Gemini key. Check it in Settings.');
           }
           lastErr = e;
@@ -617,9 +699,9 @@ export async function geminiImage(prompt, imagePart = null, aspectRatio = null, 
   // Surface the REAL failure: a concrete Google error first, then a soft
   // (no-image) reason, then a rate-limit message — never a generic shrug.
   const hard = failures.find(f => f.err && !isRateLimit(f.err));
-  if (hard) throw new Error(`Image model error: ${hard.err.status ? `HTTP ${hard.err.status} — ` : ''}${hard.err.message} (model: ${hard.model})`);
+  if (hard) { const m = `Image model error: ${hard.err.status ? `HTTP ${hard.err.status} — ` : ''}${hard.err.message} (model: ${hard.model})`; logActivity(currentToolName(), m); throw new Error(m); }
   const softF = failures.find(f => f.soft);
-  if (softF) throw new Error(`Image model error: ${softF.soft} (model: ${softF.model})`);
+  if (softF) { const m = `Image model error: ${softF.soft} (model: ${softF.model})`; logActivity(currentToolName(), m); throw new Error(m); }
   // A daily-quota failure gets the truthful daily message, not a raw 429:
   // the pair was marked cooling for hours on the spot, so it was never
   // retried inside this call either.
@@ -628,11 +710,14 @@ export async function geminiImage(prompt, imagePart = null, aspectRatio = null, 
     const err = new Error(`Image model error: ${DAILY_LIMIT_MESSAGE} (model: ${dailyF.model})`);
     err.googleMessage = dailyF.err.message || '';
     err.dailyQuota = true;
+    logActivity(currentToolName(), err.message);
     throw err;
   }
   const rate = failures.find(f => f.err);
-  if (rate) throw new Error(`Image model error: HTTP ${rate.err.status || 429} — ${rate.err.message} (model: ${rate.model})`);
-  throw new Error('Image model error: no image model on your key answered. Open Settings and refresh the model list, or add another key.');
+  if (rate) { const m = `Image model error: HTTP ${rate.err.status || 429} — ${rate.err.message} (model: ${rate.model})`; logActivity(currentToolName(), m); throw new Error(m); }
+  const m2 = 'Image model error: no image model on your key answered. Open Settings and refresh the model list, or add another key.';
+  logActivity(currentToolName(), m2);
+  throw new Error(m2);
 }
 
 /** Gemini's built-in voices for text-to-speech (prebuilt voice names). */

@@ -644,3 +644,17 @@ img.pfp-prev { max-width: 220px; width: 100%; border-radius: 14px; display: bloc
   body.printmode .hwsheet.picked, body.printmode .hwsheet.picked * { visibility: visible !important; }
   body.printmode .hwsheet.picked { position: fixed; left: 0; top: 0; width: 100%; box-shadow: none; border-radius: 0; }
 }
+
+/* ===== Pass 3a: mobile fixes + new surfaces ===== */
+/* Two/three-button rows collapse to one column on phones instead of
+   squeezing (the audit's mobile finding). */
+@media (max-width:560px){
+  .btns.two,.btns.three{grid-template-columns:1fr}
+  .topbar .brand{font-size:19px}
+  .mainnav{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .mainnav::-webkit-scrollbar{display:none}
+  .mainnav a{white-space:nowrap}
+}
+.toast{max-width:min(480px,calc(100% - 32px))}
+.restnote{margin:14px 0 0}
+a.tile{text-decoration:none;color:inherit}

@@ -13,6 +13,8 @@ function fmtT(s) { s = Math.max(0, Math.round(Number(s) || 0)); const h = Math.f
 function fmtCut(s) { s = Math.max(0, Number(s) || 0); const whole = Math.floor(s), t = Math.round((s - whole) * 10); const h = Math.floor(whole / 3600), m = Math.floor((whole % 3600) / 60), sec = whole % 60; return (h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`) + `.${t}`; }
 
 export function initEditor(ctx) {
+  const edReadyBtn = $('ed-ready');
+  if (edReadyBtn) edReadyBtn.addEventListener('click', () => { const t = document.getElementById(ctx.getMode() === 'tx' ? 'txmake' : 'ytmake'); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
   if (!$('editor')) return { open() {}, close() {} };
   let cur = null;
 

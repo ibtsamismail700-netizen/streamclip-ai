@@ -3,7 +3,7 @@
 // Notes, Assignment Builder, Profile Picture Maker).
 // All AI runs in the browser on the visitor's key, via js/gemini.js only.
 import { requireKey, hasKey, geminiText, geminiJson, geminiImage, geminiParts, geminiPartsJson, geminiYouTubeJson, geminiTTS, GEMINI_VOICES, fileToInline, esc } from './gemini.js';
-import { toast } from './site.js';
+import { toast, saveWork, workFor } from './site.js';
 
 const $ = (id) => document.getElementById(id);
 const tool = document.body.dataset.tool;
@@ -110,7 +110,6 @@ async function sourceText(prompt, opts = {}) {
   if (SRC.type === 'youtube') return geminiParts([srcPart(), { text: prompt }], { temperature: 0.5, timeoutMs: 240000, ...opts });
   return geminiText(`${prompt}\n\n--- THE MATERIAL ---\n${String(SRC.text || '').slice(0, 60000)}`, opts);
 }
-function sstep(id, state, text) { const el = $(id); if (!el) return; el.className = 'step' + (state ? ' ' + state : ''); const s = el.querySelector('span:last-child'); if (s && text) s.textContent = text; }
 function saveHandoff() {
   if (!SRC) return;
   try {
@@ -165,23 +164,15 @@ if (STUDENT_TOOLS2.includes(tool)) {
     if (!id) { toast('Paste a proper YouTube lecture link first.', true); return; }
     const b = e.currentTarget; busy(b, true);
     const prog = makeProgress($('prog'), ['Reading the source', 'Analysing the lecture', 'Ready']);
-    $('scansteps').classList.remove('hidden');
-    sstep('ss1', 'now', 'Reading the lecture link…');
-    sstep('ss2', '', 'Gemini watches the lecture');
-    sstep('ss3', '', 'Mapping the topics in order');
     try {
-      sstep('ss1', 'ok', 'Lecture link accepted');
-      sstep('ss2', 'now', 'Gemini is watching the whole lecture…');
-      prog.setStep(1);
+      prog.setStep(1, 'Gemini is watching the whole lecture…');
       const d = await geminiPartsJson([{ fileData: { fileUri: link, mimeType: 'video/*' } }, { text: `Watch this whole lecture video carefully. Return JSON only: {"title":"...","durationSec":0,"chapters":[{"title":"...","startSec":0}]}
-title: the lecture's real title. durationSec: its total length in seconds (0 only if you truly cannot tell). chapters: the main topics in the EXACT order they are taught (never reshuffled), each with startSec = the second from the video start where that topic begins. Up to 12 chapters.` }], { temperature: 0.3, timeoutMs: 240000, onRetry: (info) => sstep('ss2', 'now', retryMsg(info)) });
-      sstep('ss2', 'ok', 'Lecture watched');
+title: the lecture's real title. durationSec: its total length in seconds (0 only if you truly cannot tell). chapters: the main topics in the EXACT order they are taught (never reshuffled), each with startSec = the second from the video start where that topic begins. Up to 12 chapters.` }], { temperature: 0.3, timeoutMs: 240000, onRetry: (info) => prog.setStep(1, retryMsg(info)) });
       const chapters = (d.chapters || []).map(c => ({ title: String(c.title || 'Topic'), startSec: parseTs(c.startSec) })).filter(c => c.title);
       setSource({ type: 'youtube', link, videoId: id, title: d.title || '', durationSec: Number(d.durationSec) || 0, chapters, ready: true });
-      sstep('ss3', 'ok', chapters.length ? `${chapters.length} topics mapped, in lecture order` : 'Topics mapped');
       prog.done();
       toast('Lecture analysed — now choose your options below.');
-    } catch (err) { sstep('ss2', '', 'Watching stopped'); prog.fail(err.message); toast('Analyse failed: ' + err.message, true); }
+    } catch (err) { prog.fail(err.message); toast('Analyse failed: ' + err.message, true); }
     busy(b, false, 'Analyse lecture');
   });
   on('srcpdf', 'change', (e) => {
@@ -195,28 +186,20 @@ title: the lecture's real title. durationSec: its total length in seconds (0 onl
     if (pendingPdf.size > 18 * 1024 * 1024) { toast('This PDF is over ~18 MB — too big to send to Gemini from the browser. Split it or use a smaller copy.', true); return; }
     const b = e.currentTarget; busy(b, true);
     const prog = makeProgress($('prog'), ['Reading the file', 'Extracting the text', 'Ready']);
-    $('pdfsteps').classList.remove('hidden');
-    sstep('ps1', 'now', 'Reading the PDF file…');
-    sstep('ps2', '', 'Extracting the full text');
-    sstep('ps3', '', 'Finding the sections');
     const st = $('pdfstatus');
     try {
       const part = await fileToInline(pendingPdf);
-      sstep('ps1', 'ok', 'PDF file read');
-      sstep('ps2', 'now', 'Gemini is extracting the full text…');
-      prog.setStep(1);
+      prog.setStep(1, 'Gemini is extracting the full text…');
       const d = await geminiPartsJson([part, { text: `Extract the content of this PDF document for a student. Return JSON only: {"text":"...","sections":["..."],"pageCount":0}
-text: the FULL text of the document in reading order — do not summarise, skip or shorten it; keep headings on their own lines. sections: the main section headings, in the document's own order. pageCount: the number of pages in this PDF if you can tell, otherwise 0.` }], { temperature: 0.2, timeoutMs: 240000, onRetry: (info) => sstep('ps2', 'now', retryMsg(info)) });
+text: the FULL text of the document in reading order — do not summarise, skip or shorten it; keep headings on their own lines. sections: the main section headings, in the document's own order. pageCount: the number of pages in this PDF if you can tell, otherwise 0.` }], { temperature: 0.2, timeoutMs: 240000, onRetry: (info) => prog.setStep(1, retryMsg(info)) });
       const text = String(d.text || '').trim();
       if (text.length < 80) throw new Error('No readable text came out of this PDF. If it is scanned images, paste the text instead.');
-      sstep('ps2', 'ok', 'Text extracted');
       const pages = Number(d.pageCount) || 0;
       if (st) st.textContent = pages > 0 ? `PDF read — ${pages} pages of content ready.` : 'PDF read — content ready.';
       setSource({ type: 'pdf', text, pdfName: pendingPdf.name, title: '', durationSec: 0, chapters: (d.sections || []).map(s => ({ title: String(s), startSec: null })), ready: true });
-      sstep('ps3', 'ok', (d.sections || []).length ? `${(d.sections || []).length} sections found, in order` : 'Sections mapped');
       prog.done();
       toast('PDF analysed — now choose your options below.');
-    } catch (err) { sstep('ps2', '', 'Extraction stopped'); prog.fail(err.message); if (st) st.textContent = ''; toast('Analyse failed: ' + err.message, true); }
+    } catch (err) { prog.fail(err.message); if (st) st.textContent = ''; toast('Analyse failed: ' + err.message, true); }
     busy(b, false, 'Analyse PDF');
   });
   on('usetext', 'click', () => {
@@ -330,8 +313,10 @@ if (tool === 'podcast') {
   let clipLen = 45, pickCount = 5, found = [], videoId = '', durationSec = 0, videoTitle = '';
   wireChips('rg-plen', 'plen', v => { clipLen = Number(v); });
   wireChips('rg-pcount', 'pcount', v => { pickCount = Number(v); });
-  const stepEl = (id, state, text) => { const el = $(id); if (!el) return; el.className = 'step' + (state ? ' ' + state : ''); el.querySelector('span:last-child').textContent = text; };
-  const scanRetry = (id) => (info) => stepEl(id, 'now', retryMsg(info));
+  // ONE progress system: the ring only (see tools.js) — retry notes and
+  // window updates write into the ring's current step.
+  let activeProg = null, curStep = 0;
+  const scanRetry = () => (info) => { if (activeProg) activeProg.setStep(curStep, retryMsg(info)); };
   const PROBE_PROMPT = 'Return JSON only: {"durationSec": 0, "title": ""} — durationSec is the total length of this video in seconds (a number), title is its title. If you truly cannot tell the length, use 0.';
   const timeLine = (m) => (m.startSec != null && m.endSec != null) ? `${fmt(m.startSec)} to ${fmt(m.endSec)} · ${Math.max(1, Math.round(m.endSec - m.startSec))}s` : '—';
   const watchUrl = (m) => (videoId && m.startSec != null) ? `https://www.youtube.com/watch?v=${videoId}&t=${Math.max(0, Math.floor(m.startSec))}s` : '';
@@ -387,7 +372,7 @@ if (tool === 'podcast') {
 SPEAKER CHANGES: note in "why" when a moment starts right as the OTHER speaker begins a story, answer or rant — clips that start on a fresh voice hold viewers better.
 Return JSON only:
 {"beyondEnd": false, "moments": [{"startSec": 0, "endSec": 0, "score": 0, "title": "...", "hook": "...", "why": "..."}]}
-startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict clip-worthiness score 0-99. title max 60 chars. hook is 3-7 punchy words. why is one short line (mention the speaker change if that is what makes it work). Skip small talk, ad reads, intros, outros and long silent pauses. If this segment is past the end of the episode, return {"beyondEnd": true, "moments": []}.`, { startSec: s, endSec: en, onRetry: scanRetry('pst2') });
+startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict clip-worthiness score 0-99. title max 60 chars. hook is 3-7 punchy words. why is one short line (mention the speaker change if that is what makes it work). Skip small talk, ad reads, intros, outros and long silent pauses. If this segment is past the end of the episode, return {"beyondEnd": true, "moments": []}.`, { startSec: s, endSec: en, onRetry: scanRetry() });
   }
   function addMoments(list, base) {
     let added = 0, dropped = 0;
@@ -409,19 +394,16 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict cl
     videoId = id;
     const b = e.currentTarget; busy(b, true);
     found = []; durationSec = 0; videoTitle = ''; renderFound();
-    $('scansteps').classList.remove('hidden');
     const prog = makeProgress($('scanprog'), ['Reading the episode', 'Listening & scoring moments', 'Ranking the best', 'Ready']);
-    stepEl('pst1', 'now', 'Asking Gemini about this episode…');
-    stepEl('pst2', '', 'Listening in 10-minute windows and scoring moments');
-    stepEl('pst3', '', 'Ranking and pre-picking the best');
+    activeProg = prog; curStep = 0;
     try {
       try {
-        const probe = await geminiYouTubeJson(url, PROBE_PROMPT, { timeoutMs: 120000, onRetry: scanRetry('pst1') });
+        const probe = await geminiYouTubeJson(url, PROBE_PROMPT, { timeoutMs: 120000, onRetry: scanRetry() });
         durationSec = Number(probe.durationSec) || 0;
         videoTitle = probe.title || '';
       } catch { /* probe is best-effort; windows below still run */ }
-      stepEl('pst1', 'ok', videoTitle ? `Episode found: ${videoTitle}${durationSec ? ` · ${fmt(durationSec)} long` : ''}` : 'Episode accepted by Gemini');
-      stepEl('pst2', 'now', 'Listening…');
+      curStep = 1;
+      prog.setStep(1, videoTitle ? `Episode found: ${videoTitle}${durationSec ? ` · ${fmt(durationSec)} long` : ''}` : 'Listening & scoring moments');
       const WIN = 600;
       const total = durationSec > 0 ? Math.min(durationSec, 4 * 3600) : 3600;
       const winsTotal = Math.max(1, Math.ceil(total / WIN));
@@ -429,8 +411,8 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict cl
       for (let k = 0; k < winsTotal && !beyond; k++) {
         if (k > 0) await breather(prevErr);
         const s = k * WIN, en = Math.min(total, s + WIN);
-        stepEl('pst2', 'now', `Listening ${fmt(s)} – ${fmt(en)} (window ${k + 1} of ${winsTotal})…`);
-        prog.setStep(1); prog.setFraction(k / winsTotal);
+        prog.setStep(1, `Listening ${fmt(s)} – ${fmt(en)} (window ${k + 1} of ${winsTotal})`);
+        prog.setFraction(k / winsTotal);
         try {
           const d = await scanWindow(url, s, en);
           if (d.beyondEnd) { beyond = true; break; }
@@ -442,24 +424,30 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict cl
         } catch (err) {
           prevErr = err;
           if (k === 0) throw err;
-          stepEl('pst2', 'now', `Window ${k + 1} could not be watched (${err.message}) — continuing…`);
+          prog.setStep(1, `Window ${k + 1} could not be watched (${err.message}) — continuing…`);
         }
       }
-      stepEl('pst2', 'ok', `Listened to the episode — ${found.length} moments found${droppedTotal ? ` · Ignored ${droppedTotal} moment${droppedTotal > 1 ? 's' : ''} past the episode's end` : ''}`);
-      prog.setStep(2);
+      curStep = 2;
+      prog.setStep(2, `Listened to the episode — ${found.length} moments found${droppedTotal ? ` · Ignored ${droppedTotal} moment${droppedTotal > 1 ? 's' : ''} past the episode's end` : ''}`);
       finishPick(pickCount, Number($('pmin').value));
       renderFound();
-      stepEl('pst3', 'ok', `Best ${found.filter(m => m.picked).length} moments pre-picked (score ≥ ${$('pmin').value})`);
+      prog.setStep(2, `Best ${found.filter(m => m.picked).length} moments pre-picked (score ≥ ${$('pmin').value})`);
+      if (found.length) saveWork('podcast-clipper', videoTitle || 'Podcast scan', { found, videoId, videoTitle, durationSec });
       prog.done();
       if (!found.length) toast('Gemini listened but found no strong moments. Try a livelier episode, or lower the minimum score.', true);
     } catch (err) {
-      stepEl('pst1', '', 'Scan stopped');
-      stepEl('pst2', '', '');
       prog.fail(err.message);
       toast('Podcast scan failed: ' + err.message + ' — private/age-restricted or very long videos can fail.', true);
     }
+    activeProg = null;
     busy(b, false, '✦ Find podcast moments');
   });
+  // Restore the last podcast scan made on this device.
+  const savedPod = workFor('podcast-clipper');
+  if (savedPod && savedPod.payload && (savedPod.payload.found || []).length) {
+    found = savedPod.payload.found; videoId = savedPod.payload.videoId || ''; videoTitle = savedPod.payload.videoTitle || ''; durationSec = savedPod.payload.durationSec || 0;
+    renderFound();
+  }
 }
 
 /* ---------- Script-to-Short ----------

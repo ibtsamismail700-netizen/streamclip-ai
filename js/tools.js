@@ -1,6 +1,6 @@
 // StreamClip AI — tool logic. All AI runs in the browser on the visitor's key.
 import { requireKey, hasKey, geminiText, geminiJson, geminiImage, geminiParts, geminiPartsJson, geminiYouTubeJson, geminiTTS, GEMINI_VOICES, fileToInline, esc } from './gemini.js';
-import { toast } from './site.js';
+import { toast, saveWork, workFor } from './site.js';
 import { initEditor } from './editor.js';
 
 const $ = (id) => document.getElementById(id);
@@ -92,7 +92,7 @@ function copyText(t, msg = 'Copied.') { navigator.clipboard.writeText(t).then(()
 // stored — they are downloaded at export time and are far too big for
 // localStorage.
 const SHORTS_LS = 'sc_shorts_v1';
-function saveShort(title, videoEl) {
+function saveShort(title, videoEl, toolPage = 'upload-video') {
   try {
     let thumb = '';
     if (videoEl && videoEl.videoWidth) {
@@ -104,7 +104,7 @@ function saveShort(title, videoEl) {
       thumb = cv.toDataURL('image/jpeg', 0.72);
     }
     const arr = JSON.parse(localStorage.getItem(SHORTS_LS) || '[]');
-    arr.unshift({ title: title || 'Untitled short', thumb, when: Date.now() });
+    arr.unshift({ title: title || 'Untitled short', thumb, when: Date.now(), tool: toolPage });
     localStorage.setItem(SHORTS_LS, JSON.stringify(arr.slice(0, 12)));
   } catch {}
 }
@@ -113,6 +113,18 @@ function chunkText(text, size = 5000) {
   for (const b of blocks) { if ((cur + '\n\n' + b).length > size && cur) { chunks.push(cur); cur = b; } else cur = cur ? cur + '\n\n' + b : b; }
   if (cur) chunks.push(cur);
   return chunks.length ? chunks : [text];
+}
+/** Split a batched designer-briefs reply into per-style briefs (null when
+ * unusable). Top-level (not nested in the thumbnail block) so the
+ * regression suite in tests/ can exercise it directly. */
+function parseBriefBatch(d, names) {
+  if (!d || typeof d !== 'object') return null;
+  const out = {};
+  for (const name of names) {
+    const v = d[name];
+    if (typeof v === 'string' && v.trim()) out[name] = v.trim();
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 /* ---------- Student Mode: shared lecture source (YouTube / PDF / text) ----------
@@ -146,7 +158,7 @@ async function sourceText(prompt, opts = {}) {
   if (SRC.type === 'youtube') return geminiParts([srcPart(), { text: prompt }], { temperature: 0.5, timeoutMs: 240000, ...opts });
   return geminiText(`${prompt}\n\n--- THE MATERIAL ---\n${String(SRC.text || '').slice(0, 60000)}`, opts);
 }
-function sstep(id, state, text) { const el = $(id); if (!el) return; el.className = 'step' + (state ? ' ' + state : ''); const s = el.querySelector('span:last-child'); if (s && text) s.textContent = text; }
+function paintNeedSrc() { const ns = $('needsrc'); if (ns) ns.classList.toggle('hidden', srcReady()); }
 function saveHandoff() {
   if (!SRC) return;
   try {
@@ -159,6 +171,7 @@ function saveHandoff() {
 }
 function renderSrcSummary() {
   const host = $('srcsummary'); if (!host) return;
+  paintNeedSrc();
   if (!srcReady()) { host.innerHTML = ''; return; }
   const isYt = SRC.type === 'youtube';
   const head = isYt ? 'Lecture analysed' : SRC.type === 'pdf' ? 'PDF analysed' : 'Text ready';
@@ -173,6 +186,7 @@ function renderSrcSummary() {
   }).join('')}</ul>` : '';
   host.innerHTML = `<div class="outcard"><div class="spread"><b>✓ ${head}</b><span class="tag y">${isYt ? 'YouTube' : SRC.type === 'pdf' ? 'PDF' : 'Text'}</span></div><p class="small dim mt">${meta}</p>${chapters}<p class="small dim mt">Every tool below now works from this material — no need to analyse again.</p></div>`;
   const mt = $('moretools'); if (mt) mt.classList.remove('hidden');
+  try { window.dispatchEvent(new CustomEvent('sc-src-ready')); } catch { /* event is best-effort */ }
 }
 function setSource(src) {
   SRC = src;
@@ -206,23 +220,15 @@ if (STUDENT_TOOLS.includes(tool)) {
     if (!id) { toast('Paste a proper YouTube lecture link first.', true); return; }
     const b = e.currentTarget; busy(b, true);
     const prog = makeProgress($('prog'), ['Reading the source', 'Analysing the lecture', 'Ready']);
-    $('scansteps').classList.remove('hidden');
-    sstep('ss1', 'now', 'Reading the lecture link…');
-    sstep('ss2', '', 'Gemini watches the lecture');
-    sstep('ss3', '', 'Mapping the topics in order');
     try {
-      sstep('ss1', 'ok', 'Lecture link accepted');
-      sstep('ss2', 'now', 'Gemini is watching the whole lecture…');
-      prog.setStep(1);
+      prog.setStep(1, 'Gemini is watching the whole lecture…');
       const d = await geminiPartsJson([{ fileData: { fileUri: link, mimeType: 'video/*' } }, { text: `Watch this whole lecture video carefully. Return JSON only: {"title":"...","durationSec":0,"chapters":[{"title":"...","startSec":0}]}
-title: the lecture's real title. durationSec: its total length in seconds (0 only if you truly cannot tell). chapters: the main topics in the EXACT order they are taught (never reshuffled), each with startSec = the second from the video start where that topic begins. Up to 12 chapters.` }], { temperature: 0.3, timeoutMs: 240000, onRetry: (info) => sstep('ss2', 'now', retryMsg(info)) });
-      sstep('ss2', 'ok', 'Lecture watched');
+title: the lecture's real title. durationSec: its total length in seconds (0 only if you truly cannot tell). chapters: the main topics in the EXACT order they are taught (never reshuffled), each with startSec = the second from the video start where that topic begins. Up to 12 chapters.` }], { temperature: 0.3, timeoutMs: 240000, onRetry: (info) => prog.setStep(1, retryMsg(info)) });
       const chapters = (d.chapters || []).map(c => ({ title: String(c.title || 'Topic'), startSec: parseTs(c.startSec) })).filter(c => c.title);
       setSource({ type: 'youtube', link, videoId: id, title: d.title || '', durationSec: Number(d.durationSec) || 0, chapters, ready: true });
-      sstep('ss3', 'ok', chapters.length ? `${chapters.length} topics mapped, in lecture order` : 'Topics mapped');
       prog.done();
       toast('Lecture analysed — now choose your options below.');
-    } catch (err) { sstep('ss2', '', 'Watching stopped'); prog.fail(err.message); toast('Analyse failed: ' + err.message, true); }
+    } catch (err) { prog.fail(err.message); toast('Analyse failed: ' + err.message, true); }
     busy(b, false, 'Analyse lecture');
   });
   // --- Analyse a PDF: Gemini extracts its full content once ---
@@ -237,28 +243,20 @@ title: the lecture's real title. durationSec: its total length in seconds (0 onl
     if (pendingPdf.size > 18 * 1024 * 1024) { toast('This PDF is over ~18 MB — too big to send to Gemini from the browser. Split it or use a smaller copy.', true); return; }
     const b = e.currentTarget; busy(b, true);
     const prog = makeProgress($('prog'), ['Reading the file', 'Extracting the text', 'Ready']);
-    $('pdfsteps').classList.remove('hidden');
-    sstep('ps1', 'now', 'Reading the PDF file…');
-    sstep('ps2', '', 'Extracting the full text');
-    sstep('ps3', '', 'Finding the sections');
     const st = $('pdfstatus');
     try {
       const part = await fileToInline(pendingPdf); // PDF goes to Google as an inlineData part
-      sstep('ps1', 'ok', 'PDF file read');
-      sstep('ps2', 'now', 'Gemini is extracting the full text…');
-      prog.setStep(1);
+      prog.setStep(1, 'Gemini is extracting the full text…');
       const d = await geminiPartsJson([part, { text: `Extract the content of this PDF document for a student. Return JSON only: {"text":"...","sections":["..."],"pageCount":0}
-text: the FULL text of the document in reading order — do not summarise, skip or shorten it; keep headings on their own lines. sections: the main section headings, in the document's own order. pageCount: the number of pages in this PDF if you can tell, otherwise 0.` }], { temperature: 0.2, timeoutMs: 240000, onRetry: (info) => sstep('ps2', 'now', retryMsg(info)) });
+text: the FULL text of the document in reading order — do not summarise, skip or shorten it; keep headings on their own lines. sections: the main section headings, in the document's own order. pageCount: the number of pages in this PDF if you can tell, otherwise 0.` }], { temperature: 0.2, timeoutMs: 240000, onRetry: (info) => prog.setStep(1, retryMsg(info)) });
       const text = String(d.text || '').trim();
       if (text.length < 80) throw new Error('No readable text came out of this PDF. If it is scanned images, paste the text instead.');
-      sstep('ps2', 'ok', 'Text extracted');
       const pages = Number(d.pageCount) || 0;
       if (st) st.textContent = pages > 0 ? `PDF read — ${pages} pages of content ready.` : 'PDF read — content ready.';
       setSource({ type: 'pdf', text, pdfName: pendingPdf.name, title: '', durationSec: 0, chapters: (d.sections || []).map(s => ({ title: String(s), startSec: null })), ready: true });
-      sstep('ps3', 'ok', (d.sections || []).length ? `${(d.sections || []).length} sections found, in order` : 'Sections mapped');
       prog.done();
       toast('PDF analysed — now choose your options below.');
-    } catch (err) { sstep('ps2', '', 'Extraction stopped'); prog.fail(err.message); if (st) st.textContent = ''; toast('Analyse failed: ' + err.message, true); }
+    } catch (err) { prog.fail(err.message); if (st) st.textContent = ''; toast('Analyse failed: ' + err.message, true); }
     busy(b, false, 'Analyse PDF');
   });
   // --- Pasted text ---
@@ -407,27 +405,50 @@ Keep it to one page: at most 4 sections with at most 4 short points each, at mos
 if (tool === 'hooks') {
   let toneVal = 'Exciting';
   document.querySelectorAll('[data-tone]').forEach(c => c.addEventListener('click', () => { toneVal = c.dataset.tone; document.querySelectorAll('[data-tone]').forEach(x => x.classList.toggle('on', x === c)); }));
+  on('sampletopic', 'click', (e) => { e.preventDefault(); $('topic').value = 'I beat the hardest boss in the game with no armour — it took 57 tries'; $('topic').focus(); toast('Sample topic filled — tap Generate to try it.'); });
+  // Packs accumulate: each generation adds a new round ABOVE the previous
+  // ones (the guide advises "generate twice and mix the best" — replacing
+  // the pack made that impossible). The newest pack is saved to Your Work
+  // and restored when the page opens again.
+  let rounds = [];
+  function renderRounds() {
+    const host = $('result'); if (!host) return;
+    host.innerHTML = rounds.map((p, ri) => {
+      const label = p.restored ? `Restored — your last pack (${new Date(p.t).toLocaleString()})` : (rounds.length > 1 ? `Round ${rounds.length - ri}` : 'Your pack');
+      return `<div class="spread mt2"><h3>${label}</h3><span class="tag">${esc(p.topic || '')}</span></div>
+      <div class="outcard"><div class="spread"><b>Hooks — say one in the first 2 seconds</b><button class="chip" data-cp="hooks" data-r="${ri}">Copy hooks</button></div><ol>${p.hooks.map(h => `<li>${esc(h)}</li>`).join('')}</ol></div>
+      <div class="outcard"><div class="spread"><b>Titles</b><button class="chip" data-cp="titles" data-r="${ri}">Copy titles</button></div><ol>${p.titles.map(t => `<li>${esc(t)}</li>`).join('')}</ol></div>
+      <div class="outcard"><div class="spread"><b>Hashtags</b><button class="chip" data-cp="tags" data-r="${ri}">Copy hashtags</button></div><p class="out mt">${p.tags.map(esc).join(' ')}</p></div>
+      <button class="btn dark block mt" data-cp="all" data-r="${ri}">Copy everything</button>`;
+    }).join('');
+    host.querySelectorAll('[data-cp]').forEach(btn => btn.addEventListener('click', () => {
+      const p = rounds[Number(btn.dataset.r)]; if (!p) return;
+      if (btn.dataset.cp === 'hooks') copyText(p.hooks.join('\n'), 'Hooks copied.');
+      else if (btn.dataset.cp === 'titles') copyText(p.titles.join('\n'), 'Titles copied.');
+      else if (btn.dataset.cp === 'tags') copyText(p.tags.join(' '), 'Hashtags copied.');
+      else copyText(`HOOKS\n${p.hooks.join('\n')}\n\nTITLES\n${p.titles.join('\n')}\n\n${p.tags.join(' ')}`, 'Everything copied.');
+    }));
+  }
+  const savedPack = workFor('hooks');
+  if (savedPack && savedPack.payload && Array.isArray(savedPack.payload.hooks)) { rounds = [{ ...savedPack.payload, restored: true, t: savedPack.t }]; renderRounds(); }
   on('go', 'click', async (e) => {
     if (!requireKey()) return;
     const topic = $('topic').value.trim();
     if (!topic) { toast('Write your topic first.', true); return; }
     const n = Number($('hcount').value);
     const b = e.currentTarget; busy(b, true);
+    const prog = makeProgress($('prog'), ['Writing hooks', 'Writing titles & hashtags', 'Ready']);
     try {
       const d = await geminiJson(`You are a viral short-form content strategist. Topic: "${topic}". Platform: ${$('platform').value}. Tone: ${toneVal}. Hook style: ${$('hstyle').value}. Language: ${$('hlang').value}.
 Return JSON only: {"hooks":["..."],"titles":["..."],"hashtags":["..."]}
-Give exactly ${n} hooks (3-7 punchy words each, all in the chosen hook style, no emojis), ${Math.max(4, n - 2)} titles (max 60 characters each), ${n} hashtags (no # symbol, single words or short phrases). Write hooks and titles in the chosen language.`, { bulk: true, onRetry: retryNote(b) });
-      const hooks = d.hooks || [], titles = d.titles || [], tags = (d.hashtags || []).map(h => '#' + String(h).replace(/\s+/g, ''));
-      out('result', `
-        <div class="outcard"><div class="spread"><b>Hooks — say one in the first 2 seconds</b><button class="chip" id="ch">Copy hooks</button></div><ol>${hooks.map(h => `<li>${esc(h)}</li>`).join('')}</ol></div>
-        <div class="outcard"><div class="spread"><b>Titles</b><button class="chip" id="ct">Copy titles</button></div><ol>${titles.map(t => `<li>${esc(t)}</li>`).join('')}</ol></div>
-        <div class="outcard"><div class="spread"><b>Hashtags</b><button class="chip" id="ctags">Copy hashtags</button></div><p class="out mt">${tags.map(esc).join(' ')}</p></div>
-        <button class="btn dark block mt" id="call">Copy everything</button>`);
-      on('ch', 'click', () => copyText(hooks.join('\n'), 'Hooks copied.'));
-      on('ct', 'click', () => copyText(titles.join('\n'), 'Titles copied.'));
-      on('ctags', 'click', () => copyText(tags.join(' '), 'Hashtags copied.'));
-      on('call', 'click', () => copyText(`HOOKS\n${hooks.join('\n')}\n\nTITLES\n${titles.join('\n')}\n\n${tags.join(' ')}`, 'Everything copied.'));
-    } catch (err) { toast(err.message, true); }
+Give exactly ${n} hooks (3-7 punchy words each, all in the chosen hook style, no emojis), ${Math.max(4, n - 2)} titles (max 60 characters each), ${n} hashtags (no # symbol, single words or short phrases). Write hooks and titles in the chosen language.`, { bulk: true, onRetry: (info) => prog.setStep(0, retryMsg(info)) });
+      prog.setStep(1);
+      const pack = { topic, hooks: d.hooks || [], titles: d.titles || [], tags: (d.hashtags || []).map(h => '#' + String(h).replace(/\s+/g, '')) };
+      rounds.unshift(pack);
+      renderRounds();
+      saveWork('hooks', topic, pack);
+      prog.done();
+    } catch (err) { prog.fail(err.message); toast(err.message, true); }
     busy(b, false, 'Generate hooks & titles');
   });
 }
@@ -442,12 +463,34 @@ if (tool === 'translate') {
     'Short lines — max 7 words': 'Break the translation into SHORT caption lines of at most 7 words each, keeping every timestamp attached to its first line.',
     'Word-by-word (karaoke)': 'Output the translation word by word — one word per line in reading order — keeping each timestamp at the start of its phrase.',
   };
+  // Upload an .srt/.txt file straight into the caption box.
+  on('srcfile', 'change', async (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    try { $('src').value = await f.text(); toast(`Loaded ${f.name} into the caption box — pick your language and translate.`); }
+    catch { toast('That file could not be read — paste the captions instead.', true); }
+  });
+  function renderTranslation(p) {
+    const mkHtml = p.mkText
+      ? `<div class="outcard"><b>Title + description (${esc(p.lang)})</b><p class="out mt">${esc(p.mkText)}</p><button class="btn dark sm mt" id="copymk">Copy title + description</button></div>`
+      : (p.mkWanted ? '<div class="outcard"><b>Title + description</b><p class="small dim mt">That extra step did not answer — your translation above is complete without it.</p></div>' : '');
+    out('result', `${p.restored ? `<p class="small dim mt">Restored — your last translation (${new Date(p.t).toLocaleString()}).</p>` : ''}<div class="outcard"><div class="spread"><b>Translated captions (${esc(p.lang)})</b><span class="tag y">${p.chunks} part${p.chunks > 1 ? 's' : ''}</span></div><p class="out mt">${esc(p.r)}</p>
+      <div class="btns two mt"><button class="btn dark sm" id="copytr">Copy translation</button><button class="btn sm" id="dltr">Download (.srt)</button></div></div>
+      <div class="outcard"><b>Companion note</b><p class="small dim mt">${esc(p.note)}</p><button class="chip mt" id="copynote">Copy note</button></div>
+      ${mkHtml}`);
+    on('copytr', 'click', () => copyText(p.r, 'Translation copied.'));
+    on('copynote', 'click', () => copyText(p.note, 'Note copied.'));
+    if (p.mkText) on('copymk', 'click', () => copyText(p.mkText, 'Title + description copied.'));
+    on('dltr', 'click', () => download(`translated-captions-${p.styleName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}.srt`, p.r, 'text/plain'));
+  }
+  const savedTr = workFor('translate');
+  if (savedTr && savedTr.payload && savedTr.payload.r) renderTranslation({ ...savedTr.payload, restored: true, t: savedTr.t });
   on('go', 'click', async (e) => {
     if (!requireKey()) return;
     const text = $('src').value.trim();
     if (!text) { toast('Paste your captions first.', true); return; }
     const b = e.currentTarget; busy(b, true);
     const st = $('tstatus');
+    const prog = makeProgress($('prog'), ['Translating captions', 'Writing the title + description', 'Ready']);
     let mkText = '';
     try {
       const chunks = chunkText(text, 4500);
@@ -455,30 +498,27 @@ if (tool === 'translate') {
       for (let i = 0; i < chunks.length; i++) {
         if (i > 0) await breather(null); // pacing: space the chunk calls out
         if (st) st.textContent = chunks.length > 1 ? `Translating part ${i + 1} of ${chunks.length}…` : 'Translating…';
+        prog.setStep(0, chunks.length > 1 ? `Translating part ${i + 1} of ${chunks.length}` : 'Translating captions');
         parts.push(await geminiText(`Translate these video captions from ${$('sfrom').value} into ${$('lang').value}. Style: ${$('tstyle').value}. Caption formatting: ${SRT_STYLE[$('srtstyle').value] || SRT_STYLE['Clean full lines']} Keep every timestamp exactly as it is. Translate only the spoken words. Do not add explanations, do not wrap in code fences.\n\n${chunks[i]}`, { bulk: true, temperature: 0.3, onRetry: retryNote(b, st) }));
+        prog.setFraction((i + 1) / chunks.length);
       }
       const r = parts.join('\n\n');
       const styleName = $('srtstyle').value;
       const lineCount = r.split('\n').filter(l => l.trim()).length;
       const note = `Companion note — captions translated to ${$('lang').value} in "${styleName}" style (${lineCount} lines, from ${$('sfrom').value}). Keep this note with the .srt file so you remember which style and language it uses.`;
-      let mkHtml = '';
       if (mkOn) {
+        prog.setStep(1);
         if (st) st.textContent = 'Writing the title + description…';
         try {
           mkText = await geminiText(`Write a YouTube title (max 70 characters) and a 2-3 line description in ${$('lang').value} for a video whose captions begin like this:\n${text.slice(0, 1500)}\nReturn exactly in this shape:\nTITLE: ...\nDESCRIPTION: ...`, { temperature: 0.6, onRetry: retryNote(b, st) });
-          mkHtml = `<div class="outcard"><b>Title + description (${esc($('lang').value)})</b><p class="out mt">${esc(mkText)}</p><button class="btn dark sm mt" id="copymk">Copy title + description</button></div>`;
-        } catch { mkHtml = '<div class="outcard"><b>Title + description</b><p class="small dim mt">That extra step did not answer — your translation above is complete without it.</p></div>'; }
+        } catch { mkText = ''; }
       }
       if (st) st.textContent = 'Done — translation ready below.';
-      out('result', `<div class="outcard"><div class="spread"><b>Translated captions (${esc($('lang').value)})</b><span class="tag y">${chunks.length} part${chunks.length > 1 ? 's' : ''}</span></div><p class="out mt">${esc(r)}</p>
-        <div class="btns two mt"><button class="btn dark sm" id="copytr">Copy translation</button><button class="btn sm" id="dltr">Download (.srt)</button></div></div>
-        <div class="outcard"><b>Companion note</b><p class="small dim mt">${esc(note)}</p><button class="chip mt" id="copynote">Copy note</button></div>
-        ${mkHtml}`);
-      on('copytr', 'click', () => copyText(r, 'Translation copied.'));
-      on('copynote', 'click', () => copyText(note, 'Note copied.'));
-      if (mkText) on('copymk', 'click', () => copyText(mkText, 'Title + description copied.'));
-      on('dltr', 'click', () => download(`translated-captions-${styleName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}.srt`, r, 'text/plain'));
-    } catch (err) { toast(err.message, true); if (st) st.textContent = ''; }
+      const payload = { r, lang: $('lang').value, styleName, chunks: chunks.length, note, mkText, mkWanted: mkOn };
+      renderTranslation(payload);
+      saveWork('translate', `Captions → ${payload.lang}`, payload);
+      prog.done();
+    } catch (err) { prog.fail(err.message); toast(err.message, true); if (st) st.textContent = ''; }
     busy(b, false, 'Translate captions');
   });
 }
@@ -552,12 +592,18 @@ Keep points short and exact to the material, in the material's own order.`, { te
       <div class="field"><span>&nbsp;</span><button class="btn dark block" id="explain">Explain in simple words</button><span class="small dim">Regenerates these notes in easy language.</span></div></div>`;
       host.appendChild(extra);
       on('explain', 'click', (ev) => makeNotes({ easy: true, lang: $('explang').value }, ev.currentTarget));
+      saveWork('notes', d.title || 'Lecture notes', { data: d });
       prog.done();
       toast('Notes ready — pick a design above the sheet, or download the picture.');
     } catch (err) { prog.fail(err.message); toast('Notes failed: ' + err.message, true); }
     busy(btn, false, 'Make my notes');
   }
   on('go', 'click', (e) => makeNotes({}, e.currentTarget));
+  // Restore the last notes + revision sheet made on this device.
+  const savedNotes = workFor('notes');
+  if (savedNotes && savedNotes.payload && savedNotes.payload.data) mountSheet($('result'), savedNotes.payload.data, 'lecture-notes');
+  const savedSheet = workFor('notes-sheet');
+  if (savedSheet && savedSheet.payload && savedSheet.payload.data) mountSheet($('sheetresult'), savedSheet.payload.data, 'revision-sheet');
   on('sheetgo', 'click', async (e) => {
     if (!requireKey() || !requireSource()) return;
     const b = e.currentTarget; busy(b, true);
@@ -567,6 +613,7 @@ Keep points short and exact to the material, in the material's own order.`, { te
       const d = await revisionSheetData(retryNote(b));
       prog.setStep(2);
       mountSheet($('sheetresult'), d, 'revision-sheet');
+      saveWork('notes-sheet', d.title || 'Revision sheet', { data: d });
       prog.done();
       toast('Revision sheet ready — one page, everything that matters.');
     } catch (err) { prog.fail(err.message); toast('Revision sheet failed: ' + err.message, true); }
@@ -577,35 +624,35 @@ Keep points short and exact to the material, in the material's own order.`, { te
 /* ---------- Flashcards + Quiz ---------- */
 if (tool === 'flashcards') {
   let cards = [], ci = 0, flipped = false, quizData = [], answered = 0, score = 0;
-  on('go', 'click', async (e) => {
-    if (!requireKey() || !requireSource()) return;
-    const b = e.currentTarget; busy(b, true);
-    const prog = makeProgress($('prog'), ['Reading your material', 'Making flashcards', 'Making the quiz', 'Ready']);
-    prog.setStep(1);
-    try {
-      const nc = Number($('fccount').value), nq = Number($('fqcount').value);
-      const d = await sourceJson(`Make study material from the attached lecture material ONLY. Difficulty: ${$('fdiff').value}. Return JSON only:
-{"flashcards":[{"front":"question or term","back":"answer"}],"quiz":[{"q":"...","options":["a","b","c","d"],"answer":0,"why":"one line"}]}
-Exactly ${nc} flashcards and ${nq} quiz questions. Stay exact to the material — invent nothing.`, { temperature: 0.5, onRetry: retryNote(b) });
-      cards = d.flashcards || []; quizData = d.quiz || []; ci = 0; flipped = false; answered = 0; score = 0;
-      out('result', `${cards.length ? `<h3 class="mt2">Flashcards — tap a card to flip</h3><div class="flashcard" id="fc"></div>
-        <div class="btns three mt"><button class="btn dark" id="prev">Previous</button><button class="btn dark" id="shuf">Shuffle</button><button class="btn dark" id="next">Next</button></div>
-        <p class="small dim mt" id="fcn"></p>
-        <button class="btn sm mt" id="dldeck">Download deck (.txt)</button>` : ''}
-        ${quizData.length ? `<h3 class="mt2">Quiz — tap an answer</h3><div class="outcard spread"><b>Your score</b><span class="tag y" id="qscore">0 / ${quizData.length}</span></div>
-        ${quizData.map((q, qi) => `<div class="outcard"><b>Q${qi + 1}. ${esc(q.q)}</b>
-        <div class="chips mt">${q.options.map((o, oi) => `<button class="chip" data-q="${qi}" data-o="${oi}">${esc(o)}</button>`).join('')}</div>
-        <p class="small dim mt hidden" id="why-${qi}"></p></div>`).join('')}
-        <p class="small dim mt" id="qfinal"></p>` : ''}`);
-      const draw = () => { if (!cards.length) return; $('fc').textContent = flipped ? cards[ci].back : cards[ci].front; $('fcn').textContent = `Card ${ci + 1} of ${cards.length} — ${flipped ? 'answer' : 'question'} side`; };
-      if (cards.length) {
-        draw();
-        on('fc', 'click', () => { flipped = !flipped; draw(); });
-        on('prev', 'click', () => { ci = (ci - 1 + cards.length) % cards.length; flipped = false; draw(); });
-        on('next', 'click', () => { ci = (ci + 1) % cards.length; flipped = false; draw(); });
-        on('shuf', 'click', () => { for (let i = cards.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cards[i], cards[j]] = [cards[j], cards[i]]; } ci = 0; flipped = false; draw(); toast('Deck shuffled.'); });
-        on('dldeck', 'click', () => download('flashcards.txt', cards.map((c, i) => `CARD ${i + 1}\nQ: ${c.front}\nA: ${c.back}`).join('\n\n'), 'text/plain'));
-      }
+  const mastered = new Set(); // indices of cards the student marked "Got it"
+  function renderDeck(restoredNote) {
+    out('result', `${restoredNote ? `<p class="small dim mt">${restoredNote}</p>` : ''}${cards.length ? `<h3 class="mt2">Flashcards — tap a card to flip</h3><div class="flashcard" id="fc"></div>
+      <div class="btns three mt"><button class="btn dark" id="prev">Previous</button><button class="btn dark" id="gotit">Got it ✓</button><button class="btn dark" id="next">Next</button></div>
+      <p class="small dim mt" id="fcn"></p>
+      <div class="btns two mt"><button class="btn dark sm" id="shuf">Shuffle deck</button><button class="btn sm" id="dldeck">Download deck (.txt)</button></div>` : ''}
+      ${quizData.length ? `<h3 class="mt2">Quiz — tap an answer</h3><div class="outcard spread"><b>Your score</b><span class="tag y" id="qscore">0 / ${quizData.length}</span></div>
+      ${quizData.map((q, qi) => `<div class="outcard"><b>Q${qi + 1}. ${esc(q.q)}</b>
+      <div class="chips mt">${q.options.map((o, oi) => `<button class="chip" data-q="${qi}" data-o="${oi}">${esc(o)}</button>`).join('')}</div>
+      <p class="small dim mt hidden" id="why-${qi}"></p></div>`).join('')}
+      <p class="small dim mt" id="qfinal"></p>
+      <button class="btn dark sm" id="qrestart">Restart quiz</button>` : ''}`);
+    const draw = () => {
+      if (!cards.length) return;
+      $('fc').textContent = flipped ? cards[ci].back : cards[ci].front;
+      $('fcn').textContent = `Card ${ci + 1} of ${cards.length} — ${flipped ? 'answer' : 'question'} side${mastered.has(ci) ? ' · ✓ mastered' : ''} · ${mastered.size} of ${cards.length} mastered`;
+      const g = $('gotit'); if (g) g.textContent = mastered.has(ci) ? '✓ Got it (tap to undo)' : 'Got it ✓';
+    };
+    if (cards.length) {
+      draw();
+      on('fc', 'click', () => { flipped = !flipped; draw(); });
+      on('prev', 'click', () => { ci = (ci - 1 + cards.length) % cards.length; flipped = false; draw(); });
+      on('next', 'click', () => { ci = (ci + 1) % cards.length; flipped = false; draw(); });
+      on('gotit', 'click', () => { if (mastered.has(ci)) mastered.delete(ci); else mastered.add(ci); draw(); if (mastered.size === cards.length) toast('Whole deck mastered — exam ready.'); });
+      on('shuf', 'click', () => { for (let i = cards.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cards[i], cards[j]] = [cards[j], cards[i]]; } ci = 0; flipped = false; mastered.clear(); draw(); toast('Deck shuffled.'); });
+      on('dldeck', 'click', () => download('flashcards.txt', cards.map((c, i) => `CARD ${i + 1}\nQ: ${c.front}\nA: ${c.back}`).join('\n\n'), 'text/plain'));
+    }
+    if (quizData.length) {
+      answered = 0; score = 0;
       document.querySelectorAll('[data-q]').forEach(btn => btn.addEventListener('click', () => {
         const qi = Number(btn.dataset.q), q = quizData[qi];
         const card = btn.closest('.outcard');
@@ -617,8 +664,29 @@ Exactly ${nc} flashcards and ${nq} quiz questions. Stay exact to the material �
         card.querySelectorAll('[data-q]').forEach(x => { if (Number(x.dataset.o) === Number(q.answer)) x.style.outline = '2px solid var(--green)'; x.disabled = true; });
         const w = $(`why-${qi}`); if (w) { w.classList.remove('hidden'); w.textContent = (ok ? 'Correct. ' : `Not quite — the answer is "${q.options[q.answer]}". `) + (q.why || ''); }
         const sc = $('qscore'); if (sc) sc.textContent = `${score} / ${quizData.length}`;
-        if (answered === quizData.length) { const f = $('qfinal'); if (f) f.textContent = `Quiz finished — you scored ${score} out of ${quizData.length} (${Math.round(score / quizData.length * 100)}%). ${score === quizData.length ? 'Perfect — exam ready.' : 'Review the red ones above, then regenerate for a fresh round.'}`; }
+        if (answered === quizData.length) { const f = $('qfinal'); if (f) f.textContent = `Quiz finished — you scored ${score} out of ${quizData.length} (${Math.round(score / quizData.length * 100)}%). ${score === quizData.length ? 'Perfect — exam ready.' : 'Review the red ones above, then restart the quiz or regenerate for a fresh round.'}`; }
       }));
+      on('qrestart', 'click', () => { renderDeck(); toast('Quiz restarted — same questions, clean slate.'); });
+    }
+  }
+  const savedDeck = workFor('flashcards');
+  if (savedDeck && savedDeck.payload && (savedDeck.payload.cards || []).length) {
+    cards = savedDeck.payload.cards || []; quizData = savedDeck.payload.quiz || []; ci = 0; flipped = false;
+    renderDeck(`Restored — your last deck & quiz (${new Date(savedDeck.t).toLocaleString()}).`);
+  }
+  on('go', 'click', async (e) => {
+    if (!requireKey() || !requireSource()) return;
+    const b = e.currentTarget; busy(b, true);
+    const prog = makeProgress($('prog'), ['Reading your material', 'Making flashcards', 'Making the quiz', 'Ready']);
+    prog.setStep(1);
+    try {
+      const nc = Number($('fccount').value), nq = Number($('fqcount').value);
+      const d = await sourceJson(`Make study material from the attached lecture material ONLY. Difficulty: ${$('fdiff').value}. Return JSON only:
+{"flashcards":[{"front":"question or term","back":"answer"}],"quiz":[{"q":"...","options":["a","b","c","d"],"answer":0,"why":"one line"}]}
+Exactly ${nc} flashcards and ${nq} quiz questions. Stay exact to the material — invent nothing.`, { temperature: 0.5, onRetry: retryNote(b) });
+      cards = d.flashcards || []; quizData = d.quiz || []; ci = 0; flipped = false; mastered.clear();
+      renderDeck();
+      saveWork('flashcards', 'Flashcards + Quiz', { cards, quiz: quizData });
       prog.done();
     } catch (err) { prog.fail(err.message); toast(err.message, true); }
     busy(b, false, 'Make flashcards & quiz');
@@ -716,6 +784,56 @@ text: the FULL text of the document in reading order — do not summarise or sho
     toast('In the print window, choose "Save as PDF" — one slide per page.');
     window.print();
   }
+  function renderDeck(restoredNote) {
+    if (!deck) return;
+    const d = deck;
+    const script = (d.slides || []).map((s, i) => `SLIDE ${i + 1}: ${s.title}\n${s.narration}`).join('\n\n');
+    out('result', `${restoredNote ? `<p class="small dim mt">${restoredNote}</p>` : ''}<div class="outcard"><h3>${esc(d.title || d.topic || '')}</h3><p class="small dim mt">Voice for playback: <b>${esc(vsel ? vsel.value : 'Kore')}</b> (change it above and re-play any slide). Play uses Gemini's AI voice on your key.</p></div>
+      ${(d.slides || []).map((s, i) => `<div class="outcard slidecard"><b>Slide ${i + 1} — ${esc(s.title)}</b>
+        <ul>${(s.bullets || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+        <p class="small dim mt"><b>Voice script:</b> ${esc(s.narration)}</p>
+        <div class="btns two mt"><button class="btn sm" data-tts="${i}">▶ Play AI voice</button><button class="btn dark sm" data-dla="${i}">Download voice (.wav)</button></div>
+        <div id="aud-${i}" class="mt"></div></div>`).join('')}
+      <div class="outcard"><b>Download your presentation</b>
+        <p class="small dim mt">The real files students submit: a PowerPoint with your narration in each slide's speaker notes, and a PDF with one slide per page. Deck quality: <b>${esc(deck.quality || '1080p')}</b> — saved with the deck for the render step; the PPT/PDF downloads don't use it.</p>
+        <div class="btns two mt"><button class="btn sm" id="dlpptx">Download PPT (.pptx)</button><button class="btn dark sm" id="dlpdf">Download PDF</button></div>
+        <p class="small dim mt hidden" id="dlerr"></p></div>
+      <div class="btns two mt"><button class="btn sm" id="dls">Download voice script (.txt)</button><button class="btn dark sm" id="playall">▶ Play all slides with voice</button></div>`);
+    on('dlpptx', 'click', downloadPptx);
+    on('dlpdf', 'click', downloadPdf);
+    on('dls', 'click', () => download('presentation-script.txt', `${d.title || d.topic}\n\n${script}`, 'text/plain'));
+    const speak = async (i, dl) => {
+      const s = (deck.slides || [])[i]; if (!s) return;
+      try {
+        toast('Generating the AI voice…');
+        const blob = await geminiTTS(s.narration, vsel ? vsel.value : 'Kore', { onRetry: (info) => { const host = $(`aud-${i}`); if (host) host.textContent = info.message || `Google is busy — retrying the voice (${info.attempt}/${info.total})…`; } });
+        const url = URL.createObjectURL(blob);
+        if (dl) { const a = document.createElement('a'); a.href = url; a.download = `slide-${i + 1}-voice.wav`; a.click(); }
+        else { const host = $(`aud-${i}`); if (host) host.innerHTML = `<audio controls autoplay src="${url}" style="width:100%"></audio>`; }
+        return url;
+      } catch (err) { toast('Voice failed: ' + err.message, true); return null; }
+    };
+    document.querySelectorAll('[data-tts]').forEach(x => x.addEventListener('click', () => speak(Number(x.dataset.tts), false)));
+    document.querySelectorAll('[data-dla]').forEach(x => x.addEventListener('click', () => speak(Number(x.dataset.dla), true)));
+    on('playall', 'click', async (e) => {
+      if (!requireKey()) return;
+      const b = e.currentTarget; let stop = false;
+      b.disabled = false; b.textContent = '⏹ Playing — tap to stop';
+      const stopH = () => { stop = true; };
+      b.addEventListener('click', stopH);
+      try {
+        for (let i = 0; i < (deck.slides || []).length && !stop; i++) {
+          const url = await speak(i, false);
+          if (!url) break;
+          b.textContent = `▶ Playing slide ${i + 1} of ${deck.slides.length} — tap to stop`;
+          const host = $(`aud-${i}`); const au = host ? host.querySelector('audio') : null;
+          if (au) await new Promise(res => { au.addEventListener('ended', res, { once: true }); au.addEventListener('error', res, { once: true }); const iv = setInterval(() => { if (stop) { au.pause(); clearInterval(iv); res(); } }, 250); });
+        }
+      } finally { b.removeEventListener('click', stopH); b.textContent = '▶ Play all slides with voice'; }
+    });
+  }
+  const savedDeckW = workFor('presentation');
+  if (savedDeckW && savedDeckW.payload && savedDeckW.payload.deck && (savedDeckW.payload.deck.slides || []).length) { deck = savedDeckW.payload.deck; renderDeck(`Restored — your last presentation (${new Date(savedDeckW.t).toLocaleString()}). Voices generate again on tap.`); }
   on('go', 'click', async (e) => {
     if (!requireKey()) return;
     const topic = $('topic').value.trim();
@@ -734,34 +852,9 @@ Narration per slide: 2-4 natural spoken sentences in the chosen language and ton
           ? await sourceJson(`Plan a student class-presentation video from the attached lecture material.${topic ? ` Focus the presentation on: "${topic}".` : ''} Points the student must cover: "${$('points').value.trim()}". Build the slides from the material itself, in the material's own order. ${shape}`, { temperature: 0.55, onRetry: retryNote(b) })
           : await geminiJson(`Plan a student class-presentation video. Topic: "${topic}". Extra points from the student: "${$('points').value.trim()}". ${shape}`, { onRetry: retryNote(b) });
       deck = { title: d.title || topic, topic, quality: $('pquality') ? $('pquality').value : '1080p', slides: d.slides || [] };
-      const script = (d.slides || []).map((s, i) => `SLIDE ${i + 1}: ${s.title}\n${s.narration}`).join('\n\n');
       prog.setStep(2);
-      out('result', `<div class="outcard"><h3>${esc(d.title || topic)}</h3><p class="small dim mt">Voice for playback: <b>${esc(vsel ? vsel.value : 'Kore')}</b> (change it above and re-play any slide). Play uses Gemini's AI voice on your key.</p></div>
-        ${(d.slides || []).map((s, i) => `<div class="outcard slidecard"><b>Slide ${i + 1} — ${esc(s.title)}</b>
-          <ul>${(s.bullets || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
-          <p class="small dim mt"><b>Voice script:</b> ${esc(s.narration)}</p>
-          <div class="btns two mt"><button class="btn sm" data-tts="${i}">▶ Play AI voice</button><button class="btn dark sm" data-dla="${i}">Download voice (.wav)</button></div>
-          <div id="aud-${i}" class="mt"></div></div>`).join('')}
-        <div class="outcard"><b>Download your presentation</b>
-          <p class="small dim mt">The real files students submit: a PowerPoint with your narration in each slide's speaker notes, and a PDF with one slide per page. Deck quality: <b>${esc(deck.quality)}</b> — applied to video exports of this deck.</p>
-          <div class="btns two mt"><button class="btn sm" id="dlpptx">Download PPT (.pptx)</button><button class="btn dark sm" id="dlpdf">Download PDF</button></div>
-          <p class="small dim mt hidden" id="dlerr"></p></div>
-        <button class="btn sm mt" id="dls">Download voice script (.txt)</button>`);
-      on('dlpptx', 'click', downloadPptx);
-      on('dlpdf', 'click', downloadPdf);
-      on('dls', 'click', () => download('presentation-script.txt', `${d.title || topic}\n\n${script}`, 'text/plain'));
-      const speak = async (i, dl) => {
-        const s = (d.slides || [])[i]; if (!s) return;
-        try {
-          toast('Generating the AI voice…');
-          const blob = await geminiTTS(s.narration, vsel ? vsel.value : 'Kore', { onRetry: (info) => { const host = $(`aud-${i}`); if (host) host.textContent = info.message || `Google is busy — retrying the voice (${info.attempt}/${info.total})…`; } });
-          const url = URL.createObjectURL(blob);
-          if (dl) { const a = document.createElement('a'); a.href = url; a.download = `slide-${i + 1}-voice.wav`; a.click(); }
-          else { const host = $(`aud-${i}`); if (host) host.innerHTML = `<audio controls autoplay src="${url}" style="width:100%"></audio>`; }
-        } catch (err) { toast('Voice failed: ' + err.message, true); }
-      };
-      document.querySelectorAll('[data-tts]').forEach(x => x.addEventListener('click', () => speak(Number(x.dataset.tts), false)));
-      document.querySelectorAll('[data-dla]').forEach(x => x.addEventListener('click', () => speak(Number(x.dataset.dla), true)));
+      renderDeck();
+      saveWork('presentation', deck.title || 'Presentation', { deck });
       prog.done();
     } catch (err) { prog.fail(err.message); toast(err.message, true); }
     busy(b, false, 'Plan my presentation');
@@ -843,7 +936,12 @@ if (tool === 'thumbnail') {
         ${(d.weak || []).length ? `<b style="display:block" class="mt">What is weak</b><ul>${d.weak.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
         ${(d.directions || []).length ? `<b style="display:block" class="mt">Redesign directions (used below)</b><ul>${d.directions.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
         <p class="small dim mt">The text box below now holds only the main headline lines — every version keeps those word for word. The smaller text from your thumbnail is listed above and is not copied into the redesigns.</p></div>`);
-    } catch (err) { toast(err.message, true); }
+    } catch (err) {
+      toast(err.message, true);
+      // The failure must be visible where the analysis would have been —
+      // and the path forward stated: the text field still works by hand.
+      out('aresult', `<div class="outcard"><b>Analysis did not run</b><p class="out mt">${esc(err.message)}</p><p class="small dim mt">You can still type the thumbnail text yourself in the box below and generate versions — the versions will design from your text alone.</p></div>`);
+    }
     busy(b, false, 'Analyse thumbnail');
   });
   // Canvas fallback painter: designed background + the text ONLY, laid out
@@ -913,12 +1011,18 @@ if (tool === 'thumbnail') {
   // Redesign prompt: built ONLY from the written analysis (topic, exact text,
   // subject, direction). The uploaded image itself is never sent to the image
   // model, so every version is a genuinely new design.
+  // Redesigner parity with the Creator: its own text style / colour
+  // scheme / subject / version-count controls, wired into the prompts
+  // exactly like the Creator's (values feed the brief batch + direct
+  // prompts below; the version count trims the style list).
+  let rTStyle = 'Bold outline', rScheme = 'Auto', rSubject = 'Auto', rVers = 6;
   const redesignPrompt = (st, i, text) => {
     const extra = (analysis?.directions || [])[i] || '';
     return `Design a COMPLETELY NEW, original YouTube thumbnail — invent a fresh composition and layout from scratch, full-frame artwork edge to edge. Do not copy, trace or reuse the layout of any existing thumbnail.
 ${analysis?.topic ? `Video topic: ${analysis.topic}.` : ''}
 ${analysis?.subject ? `Main subject to feature prominently: ${analysis.subject}.` : ''}
 Art direction: ${st.dir}.${extra ? ` Creative direction: ${extra}.` : ''}
+Text style: ${rTStyle}. Colour direction: ${rScheme === 'Auto' ? 'colours that fit the topic best' : rScheme}.${rSubject !== 'Auto' ? ` Main subject emphasis: ${rSubject}.` : ''}
 The thumbnail must show this EXACT text, word for word, spelled exactly, in huge bold letters that dominate the design: "${text}"
 High contrast, dramatic, instantly readable at small size, professional YouTube thumbnail style, no watermark.`;
   };
@@ -936,19 +1040,9 @@ High contrast, dramatic, instantly readable at small size, professional YouTube 
   // actual image generation needs.
   let briefsBroken = false;
   let briefBatchFor = null; // analysis+text key the batched briefs were fetched for
-  /** Split a batched-briefs reply into per-style briefs (null when unusable). */
-  function parseBriefBatch(d, names) {
-    if (!d || typeof d !== 'object') return null;
-    const out = {};
-    for (const name of names) {
-      const v = d[name];
-      if (typeof v === 'string' && v.trim()) out[name] = v.trim();
-    }
-    return Object.keys(out).length ? out : null;
-  }
   async function ensureBriefs(text) {
-    const bk = `${text}|${analysis?.topic || ''}|${(analysis?.directions || []).join('~')}`;
-    if (briefBatchFor === bk) return; // already attempted for this analysis + text
+    const bk = `${text}|${analysis?.topic || ''}|${(analysis?.directions || []).join('~')}|${rTStyle}|${rScheme}|${rSubject}`;
+    if (briefBatchFor === bk) return; // already attempted for this analysis + text + designer choices
     briefBatchFor = bk;
     try {
       const list = varStyles.map((st, i) => {
@@ -961,6 +1055,7 @@ High contrast, dramatic, instantly readable at small size, professional YouTube 
         geminiJson(`You are a senior graphic designer. For EACH of the ${varStyles.length} versions below of a YouTube thumbnail for the same video, write a short DESIGNER BRIEF (5-7 lines, plain text, no headings, no bullet points inside a brief). Each brief must cover exactly: the scene/background, the main visual subject and how it is shown, the colour palette (name 3-4 colours), the composition/layout, and where the big text sits with its hierarchy (which words are biggest). Every design must be a completely new, original composition — never a copy of any existing thumbnail's layout.
 Video topic: ${analysis?.topic || 'not specified'}
 Main subject: ${analysis?.subject || 'the topic itself'}
+Designer choices to apply in every brief: text style "${rTStyle}"; colour direction "${rScheme}";${rSubject !== 'Auto' ? ` main subject emphasis "${rSubject}";` : ''}
 Exact text that will appear on every thumbnail: "${text}"
 Versions:
 ${list}
@@ -992,11 +1087,13 @@ Return JSON only, keyed by the exact version names: {${varStyles.map(st => `"${s
     // never desync from the size the user picked.
     const size = snapSize();
     const { W, H } = size;
+    const runStyles = varStyles.slice(0, rVers);
+    const savedVers = [];
     let made = 0, designed = 0, prevErr = null;
     try {
-      for (let i = 0; i < varStyles.length; i++) {
+      for (let i = 0; i < runStyles.length; i++) {
         if (i > 0) await breather(prevErr); // pacing between versions (longer after a limit hit)
-        const st = varStyles[i];
+        const st = runStyles[i];
         const card = document.createElement('div'); card.className = 'outcard';
         card.innerHTML = `<div class="spread"><b>Version ${i + 1} — ${st.name}</b><span class="tag y">${sizeTag(size)}</span></div><p class="small dim mt stline">Creating a brand-new design…</p>`;
         host.appendChild(card);
@@ -1011,7 +1108,7 @@ Return JSON only, keyed by the exact version names: {${varStyles.map(st => `"${s
           if (stline) stline.textContent = i === 0 ? 'Writing the designer briefs (one call for all versions)…' : 'Creating a brand-new design…';
           if (i === 0) prog.setStep(0);
           const prompt = await versionPrompt(st, i, text);
-          prog.setStep(1, `Creating version ${i + 1} of ${varStyles.length}`);
+          prog.setStep(1, `Creating version ${i + 1} of ${runStyles.length}`);
           if (stline) stline.textContent = 'Creating a brand-new design…';
           const url = await geminiImage(prompt, null, size.model, { onRetry: retryNote(b) });
           const img = await loadImg(url);
@@ -1032,17 +1129,21 @@ Return JSON only, keyed by the exact version names: {${varStyles.map(st => `"${s
         card.querySelector('.stline')?.remove();
         card.appendChild(cv);
         if (note) card.insertAdjacentHTML('beforeend', note);
+        // Keep a small copy of each version so a refresh restores them
+        // (JPEG keeps 6 versions light enough for browser storage).
+        try { const small = cv.toDataURL('image/jpeg', 0.85); if (small.length < 700000) savedVers.push({ name: st.name, size: sizeTag(size), img: small }); } catch { /* canvas tainted — skip */ }
         const dl = document.createElement('button'); dl.className = 'btn sm mt'; dl.textContent = 'Download this version';
         dl.addEventListener('click', () => { const a = document.createElement('a'); a.download = `thumbnail-${size.id}-v${i + 1}.png`; a.href = cv.toDataURL('image/png'); a.click(); });
         card.appendChild(dl);
-        prog.setFraction((i + 1) / varStyles.length);
+        prog.setFraction((i + 1) / runStyles.length);
       }
+      if (savedVers.length) saveWork('thumbnail-rd', text, { text, vers: savedVers });
       prog.done();
     } finally {
       busy(b, false, 'Generate different versions');
     }
     toast(designed === 0
-      ? `6 brand-new versions made — same text on all, at ${sizeTag(size)}.`
+      ? `${runStyles.length} brand-new versions made — same text on all, at ${sizeTag(size)}.`
       : `${made} new AI versions + ${designed} designed versions made — same text on all, at ${sizeTag(size)}.`);
   });
   // Creator options: every chip below feeds the design prompt and/or the
@@ -1057,6 +1158,11 @@ Return JSON only, keyed by the exact version names: {${varStyles.map(st => `"${s
   wireOpt('rg-bgstyle', 'bgstyle', v => cBg = v);
   wireOpt('rg-subject', 'subject', v => cSubject = v);
   wireOpt('rg-vers', 'vers', v => cVers = Number(v));
+  // Redesigner parity controls (its own state, set above near varStyles).
+  wireOpt('rg-rtstyle', 'rtstyle', v => rTStyle = v);
+  wireOpt('rg-rscheme', 'rscheme', v => rScheme = v);
+  wireOpt('rg-rsubject', 'rsubject', v => rSubject = v);
+  wireOpt('rg-rvers', 'rvers', v => rVers = Number(v));
   const SCHEMES = {
     auto: { name: 'Auto', grad: ['#23307a', '#0b1026'], glow: '#ffe46b', palette: 'colours that fit the topic best' },
     yellow: { name: 'Yellow-black', grad: ['#3a2f00', '#100c00'], glow: '#ffd94d', palette: 'electric yellow and black' },
@@ -1148,6 +1254,7 @@ Return JSON only, keyed by the exact version names: {${varStyles.map(st => `"${s
       out('cresult', '');
       const host = $('cresult');
       let madeAI = 0, lastBgErr = '', prevErr = null;
+      const savedVers = [];
       for (let v = 0; v < cVers; v++) {
         if (v > 0) await breather(prevErr); // pacing between versions (longer after a limit hit)
         prog.setStep(1, cVers > 1 ? `Creating version ${v + 1} of ${cVers}` : 'Creating the thumbnail');
@@ -1157,6 +1264,7 @@ Return JSON only, keyed by the exact version names: {${varStyles.map(st => `"${s
           bg = await loadImg(url); madeAI++; prevErr = null;
         } catch (err) { bgErr = err.message; lastBgErr = bgErr; prevErr = err; /* designed-gradient fallback in composeThumb, real error shown on the card */ }
         const cv = composeThumb(bg, head, sub, size);
+        try { const small = cv.toDataURL('image/jpeg', 0.85); if (small.length < 700000) savedVers.push({ name: cVers > 1 ? `Version ${v + 1}` : 'Your thumbnail', size: sizeTag(size), img: small }); } catch { /* skip */ }
         const card = document.createElement('div'); card.className = 'outcard';
         card.innerHTML = `<div class="spread"><b>${cVers > 1 ? `Version ${v + 1}` : 'Your thumbnail'}</b><span class="tag y">${sizeTag(size)}</span></div><p class="small dim mt">${esc(TSTYLE_NAMES[cTStyle])} text · ${esc(sch.name)} scheme · ${esc(BG_NAMES[cBg])} · ${esc(SUBJ_NAMES[cSubject])}${bg ? '' : ' · designed background'}</p>${bg ? '' : `<p class="small dim mt">${esc(bgErr)}</p>`}`;
         cv.className = 'thumbcv'; card.appendChild(cv);
@@ -1165,11 +1273,22 @@ Return JSON only, keyed by the exact version names: {${varStyles.map(st => `"${s
         card.appendChild(dl); host.appendChild(card);
         prog.setFraction((v + 1) / cVers);
       }
+      if (savedVers.length) saveWork('thumbnail', head || prompt || 'Thumbnail', { text: head || prompt, vers: savedVers });
       prog.done();
       toast(madeAI ? `${cVers} thumbnail version${cVers > 1 ? 's' : ''} made at ${sizeTag(size)} — same design choices on each.` : (lastBgErr || 'The image model did not answer.'), !madeAI);
     } catch (err) { prog.fail(err.message); toast(err.message, true); }
     busy(b, false, 'Create thumbnail');
   });
+  // Restore the last Creator + Redesigner versions made on this device.
+  const paintSavedVers = (host, w, heading) => {
+    if (!host || !w || !(w.payload.vers || []).length) return;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `<p class="small dim mt">Restored — ${heading} (${new Date(w.t).toLocaleString()}). Small copies are kept on this device; download again from a fresh run for full size.</p>` + w.payload.vers.map(v2 => `<div class="outcard"><div class="spread"><b>${esc(v2.name)}</b><span class="tag y">${esc(v2.size || '')}</span></div><img class="thumbcv" src="${v2.img}" alt=""><button class="btn sm mt" data-dl="${esc(v2.name)}">Download this version</button></div>`).join('');
+    wrap.querySelectorAll('[data-dl]').forEach(btn => btn.addEventListener('click', () => { const v2 = w.payload.vers.find(x => x.name === btn.dataset.dl); if (v2) { const a = document.createElement('a'); a.download = `thumbnail-restored-${v2.name.replace(/\W+/g, '-').toLowerCase()}.jpg`; a.href = v2.img; a.click(); } }));
+    host.appendChild(wrap);
+  };
+  paintSavedVers($('cresult'), workFor('thumbnail'), 'your last Creator thumbnails');
+  paintSavedVers($('vars'), workFor('thumbnail-rd'), 'your last Redesigner versions');
 }
 
 /* ---------- Upload Your Own Video / Lecture Clips (shared video handling) ---------- */
@@ -1270,15 +1389,25 @@ if (tool === 'upload' || tool === 'lecture-clips') {
       const chunks = [];
       rec.ondataavailable = (x) => chunks.push(x.data);
       const done = new Promise(r => rec.onstop = r);
-      v.currentTime = Number($('in').value);
+      // Live progress + Cancel: the export records in real time, so the
+      // user watches it count and can abandon a wrong trim without
+      // waiting out the whole segment (the partial file is discarded).
+      const progEl = $('exprog'); const cancelBtn = $('excancel');
+      let cancelled = false;
+      const segStart = Number($('in').value), segLen = Math.max(1, Number($('out').value) - segStart);
+      if (cancelBtn) { cancelBtn.classList.remove('hidden'); cancelBtn.onclick = () => { cancelled = true; }; }
+      v.currentTime = segStart;
       await v.play(); rec.start(250);
       const stopAt = Number($('out').value);
-      await new Promise(r => { const iv = setInterval(() => { if (v.currentTime >= stopAt || v.paused) { clearInterval(iv); r(); } }, 200); });
+      await new Promise(r => { const iv = setInterval(() => { if (progEl) progEl.textContent = `Recording your clip… ${fmt(Math.max(0, v.currentTime - segStart))} of ${fmt(segLen)} — keep this tab open`; if (cancelled || v.currentTime >= stopAt || v.paused) { clearInterval(iv); r(); } }, 200); });
       v.pause(); rec.stop(); await done;
       cancelAnimationFrame(raf);
+      if (cancelBtn) cancelBtn.classList.add('hidden');
+      if (progEl) progEl.textContent = '';
+      if (cancelled) { toast('Export cancelled — nothing was saved.'); busy(b, false, 'Export clip (WebM)'); return; }
       const name = ($('ctitle')?.value.trim() || 'streamclip-clip').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'streamclip-clip';
       download(`${name}.webm`, new Blob(chunks, { type: 'video/webm' }));
-      saveShort(($('ctitle')?.value.trim() || name), v);
+      saveShort(($('ctitle')?.value.trim() || name), v, tool === 'lecture-clips' ? 'lecture-clips' : 'upload-video');
       toast(`Clip exported as WebM at ${W}×${H} (${q}).`);
     } catch (err) { toast('Export failed: ' + err.message, true); }
     busy(b, false, 'Export clip (WebM)');
@@ -1334,6 +1463,12 @@ if (tool === 'upload' || tool === 'lecture-clips') {
       toast('Trim set — press Play this part to check it, then Export.');
       window.scrollTo({ top: $('stage').offsetTop - 80, behavior: 'smooth' });
     }));
+    if (tool === 'lecture-clips' && items.length) saveWork('lecture-clips', 'Revision concepts', { type: fromWatch ? 'watch' : 'transcript', items });
+  }
+  // Lecture Clips: restore the last concept list made on this device.
+  if (tool === 'lecture-clips') {
+    const savedLc = workFor('lecture-clips');
+    if (savedLc && savedLc.payload && (savedLc.payload.items || []).length) renderPlan(savedLc.payload.items, savedLc.payload.type === 'watch');
   }
 }
 
@@ -1550,9 +1685,19 @@ if (tool === 'clipper') {
     } catch (err) { toast('Voice failed: ' + err.message, true); }
     renderFound();
   }
-  const stepEl = (id, state, text) => { const el = $(id); if (!el) return; el.className = 'step' + (state ? ' ' + state : ''); el.querySelector('span:last-child').textContent = text; };
-  const scanRetry = (id) => (info) => stepEl(id, 'now', retryMsg(info));
+  // ONE progress system: the ring only. Retry notes and window updates
+  // write into the ring's current step (activeProg/curStep), never a
+  // second step list.
+  let activeProg = null, curStep = 0;
+  const scanRetry = () => (info) => { if (activeProg) activeProg.setStep(curStep, retryMsg(info)); };
   const PROBE_PROMPT = 'Return JSON only: {"durationSec": 0, "title": ""} — durationSec is the total length of this video in seconds (a number), title is its title. If you truly cannot tell the length, use 0.';
+  function saveClipWork() {
+    if (!found.length) return;
+    saveWork('clipper', streamTitle || 'Stream Clipper scan', {
+      mode, videoId, streamTitle, durationSec, quality, voiceMode,
+      found: found.map(m => ({ ...m, voiceUrl: undefined })),
+    });
+  }
 
   /* ----- YouTube scan: Gemini watches the video in time windows ----- */
   async function scanWindow(url, s, en) {
@@ -1583,23 +1728,20 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
     if (!/(youtube\.com|youtu\.be)/i.test(url)) { toast('Paste a YouTube link — or switch to the Transcript tab for Twitch.', true); return; }
     const b = e.currentTarget; busy(b, true);
     found = []; scannedRanges = []; scannedUrl = url; renderFound();
-    $('scansteps').classList.remove('hidden');
     const prog = makeProgress($('scanprog'), ['Reading the video', 'Watching & scoring moments', 'Ranking the best', 'Ready']);
-    stepEl('st1', 'now', 'Asking Gemini about this video…');
-    stepEl('st2', '', 'Watching in 10-minute windows and scoring moments');
-    stepEl('st3', '', 'Ranking and pre-picking the best');
+    activeProg = prog; curStep = 0;
     try {
       if (!(durationSec > 0 && probedId === videoId)) {
         try {
-          const probe = await geminiYouTubeJson(url, PROBE_PROMPT, { timeoutMs: 120000, onRetry: scanRetry('st1') });
+          const probe = await geminiYouTubeJson(url, PROBE_PROMPT, { timeoutMs: 120000, onRetry: scanRetry() });
           durationSec = Number(probe.durationSec) || 0;
           if (probe.title && !streamTitle) { streamTitle = probe.title; $('sc-title').textContent = streamTitle; }
           probedId = videoId;
           updateCalls();
         } catch { /* probe is best-effort; windows below still run */ }
       }
-      stepEl('st1', 'ok', streamTitle ? `Video found: ${streamTitle}${durationSec ? ` · ${fmt(durationSec)} long` : ''}` : 'Video accepted by Gemini');
-      stepEl('st2', 'now', 'Watching…');
+      curStep = 1;
+      prog.setStep(1, streamTitle ? `Video found: ${streamTitle}${durationSec ? ` · ${fmt(durationSec)} long` : ''}` : 'Watching & scoring moments');
       const WIN = 600;
       const total = durationSec > 0 ? Math.min(durationSec, 4 * 3600) : 3600;
       const winsTotal = Math.max(1, Math.ceil(total / WIN));
@@ -1610,15 +1752,15 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
         const t0 = Math.max(0, total - Number(scanRange));
         for (let s = t0; s < total; s += WIN) winList.push([s, Math.min(total, s + WIN)]);
       } else {
-        if (scanRange !== 'whole') stepEl('st2', 'now', 'Length unknown — scanning the whole video instead…');
+        if (scanRange !== 'whole') prog.setStep(1, 'Length unknown — scanning the whole video instead…');
         for (let w = 0; w < winsTotal; w++) winList.push([w * WIN, Math.min(total, w * WIN + WIN)]);
       }
       let beyond = false, droppedTotal = 0, prevErr = null;
       for (let k = 0; k < winList.length && !beyond; k++) {
         if (k > 0) await breather(prevErr); // pacing between window scans (longer after a limit hit)
         const [s, en] = winList[k];
-        stepEl('st2', 'now', `Watching ${fmt(s)} – ${fmt(en)} (window ${k + 1} of ${winList.length})…`);
-        prog.setStep(1); prog.setFraction(k / winList.length);
+        prog.setStep(1, `Watching ${fmt(s)} – ${fmt(en)} (window ${k + 1} of ${winList.length})`);
+        prog.setFraction(k / winList.length);
         try {
           const d = await scanWindow(url, s, en);
           if (d.beyondEnd) { beyond = true; break; }
@@ -1631,22 +1773,22 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
         } catch (err) {
           prevErr = err;
           if (k === 0) throw err; // first window failing = the link itself failed
-          stepEl('st2', 'now', `Window ${k + 1} could not be watched (${err.message}) — continuing…`);
+          prog.setStep(1, `Window ${k + 1} could not be watched (${err.message}) — continuing…`);
         }
       }
-      stepEl('st2', 'ok', `Watched the video — ${found.length} moments found${droppedTotal ? ` · Ignored ${droppedTotal} moment${droppedTotal > 1 ? 's' : ''} past the video's end` : ''}`);
-      prog.setStep(2);
+      curStep = 2;
+      prog.setStep(2, `Watched the video — ${found.length} moments found${droppedTotal ? ` · Ignored ${droppedTotal} moment${droppedTotal > 1 ? 's' : ''} past the video's end` : ''}`);
       finishPick(pickCount, Number($('cmin').value));
       renderFound();
-      stepEl('st3', 'ok', `Best ${found.filter(m => m.picked).length} moments pre-picked (score ≥ ${$('cmin').value})`);
+      prog.setStep(2, `Best ${found.filter(m => m.picked).length} moments pre-picked (score ≥ ${$('cmin').value})`);
+      saveClipWork();
       prog.done();
       if (!found.length) toast('Gemini watched it but found no strong moments. Try the transcript mode, or a different stream.', true);
     } catch (err) {
-      stepEl('st1', '', 'Scan stopped');
-      stepEl('st2', '', '');
       prog.fail(err.message);
       toast('YouTube scan failed: ' + err.message + ' — private/age-restricted or very long videos can fail; the Transcript tab always works.', true);
     }
+    activeProg = null;
     busy(b, false, '✦ Start scanning');
   });
 
@@ -1658,12 +1800,11 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
     if (!requireKey()) return;
     const url = $('slink').value.trim();
     if (!scannedUrl || url !== scannedUrl) { toast('Scan this video first, then scan its newest part.', true); return; }
-    $('scansteps').classList.remove('hidden');
     const prog = makeProgress($('scanprog'), ['Checking the newest part', 'Watching the newest window', 'Updating the list', 'Ready']);
-    stepEl('st2', 'now', 'Checking the newest part…');
+    activeProg = prog; curStep = 0;
     try {
       try {
-        const p = await geminiYouTubeJson(url, PROBE_PROMPT, { timeoutMs: 120000, onRetry: scanRetry('st1') });
+        const p = await geminiYouTubeJson(url, PROBE_PROMPT, { timeoutMs: 120000, onRetry: scanRetry() });
         if (Number(p.durationSec)) durationSec = Number(p.durationSec);
       } catch { /* keep the duration we have */ }
       const WIN = 600;
@@ -1671,12 +1812,12 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
       const winsTotal = Math.max(1, Math.ceil(total / WIN));
       const ts = (winsTotal - 1) * WIN, te = total;
       const covered = scannedRanges.some(([s, en]) => s <= ts && en >= te);
-      stepEl('st2', 'now', covered
+      curStep = 1;
+      prog.setStep(1, covered
         ? 'Everything was already scanned — rescanning the newest part (the last 10 minutes) anyway…'
         : `Scanning the newest part (${fmt(ts)} – ${fmt(te)})…`);
       const pickedAt = new Set(found.filter(m => m.picked).map(m => m.startSec));
       found = found.filter(m => !(m.startSec != null && m.startSec >= ts && m.startSec < te));
-      prog.setStep(1);
       const d = await scanWindow(url, ts, te);
       let dropped = 0;
       if (!d.beyondEnd) dropped = addMoments(d.moments, ts).dropped;
@@ -1684,9 +1825,11 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
       scannedRanges.push([ts, te]);
       found.sort((a, b2) => b2.score - a.score);
       renderFound();
-      stepEl('st2', 'ok', `Newest part scanned — ${found.length} moments in total${dropped ? ` · Ignored ${dropped} moment${dropped > 1 ? 's' : ''} past the video's end` : ''}`);
+      prog.setStep(2, `Newest part scanned — ${found.length} moments in total${dropped ? ` · Ignored ${dropped} moment${dropped > 1 ? 's' : ''} past the video's end` : ''}`);
+      saveClipWork();
       prog.done();
     } catch (err) { prog.fail(err.message); toast('Newest-part scan failed: ' + err.message, true); renderFound(); }
+    activeProg = null;
   }
 
   /* ----- Transcript mode: same scoring engine, chunk by chunk ----- */
@@ -1696,21 +1839,25 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
     if (text.length < 120) { toast('Paste the stream transcript first (at least a few minutes of it).', true); return; }
     const b = e.currentTarget; busy(b, true);
     found = []; renderFound();
-    const st = $('txstatus'); if (st) st.textContent = 'Reading the transcript…';
+    mode = 'tx'; // transcript results feed the same editor in transcript mode
+    const prog = makeProgress($('txprog'), ['Reading the transcript', 'Scoring the moments', 'Ready']);
     try {
       const chunks = chunkText(text, 9000);
       for (let i = 0; i < chunks.length; i++) {
         if (i > 0) await breather(null); // pacing: space the chunk calls out
-        if (st) st.textContent = `Scoring part ${i + 1} of ${chunks.length}… (${found.length} moments so far)`;
-        const d = await geminiJson(`You are a top stream clipper. From this part of a stream transcript, pick the moments for viral Shorts. Return JSON only: {"items":[{"title":"catchy, max 60 chars","at":"timestamp as written in the text, or '—'","score":0,"hook":"3-7 punchy words","why":"one short line"}]} Score strictly 0-99. Skip silence, menus, sponsor talk, intros. Transcript part:\n${chunks[i]}`, { bulk: true, onRetry: retryNote(null, st) });
+        prog.setStep(1, `Scoring part ${i + 1} of ${chunks.length} — ${found.length} moments so far`);
+        const d = await geminiJson(`You are a top stream clipper. From this part of a stream transcript, pick the moments for viral Shorts. Return JSON only: {"items":[{"title":"catchy, max 60 chars","at":"timestamp as written in the text, or '—'","score":0,"hook":"3-7 punchy words","why":"one short line"}]} Score strictly 0-99. Skip silence, menus, sponsor talk, intros. Transcript part:\n${chunks[i]}`, { bulk: true, onRetry: (info) => prog.setStep(1, retryMsg(info)) });
         for (const m of (d.items || [])) found.push({ startSec: parseTs(m.at), endSec: null, startLabel: m.at || '—', score: Math.max(0, Math.min(99, Number(m.score) || 0)), title: m.title || 'Moment', hook: m.hook || '', why: m.why || '', picked: false });
         found.sort((a, b2) => b2.score - a.score);
         renderFound();
+        prog.setFraction((i + 1) / chunks.length);
       }
       finishPick(Number($('tcount').value), Number($('tmin').value));
       renderFound();
-      if (st) st.textContent = `Done — ${found.length} moments found, best ${found.filter(m => m.picked).length} pre-picked.`;
-    } catch (err) { toast(err.message, true); if (st) st.textContent = ''; }
+      saveClipWork();
+      prog.done();
+      if (!found.length) toast('No strong moments found in that transcript.', true);
+    } catch (err) { prog.fail(err.message); toast(err.message, true); }
     busy(b, false, 'Find best moments');
   });
 
@@ -1728,6 +1875,17 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. score is a strict vi
     onMake: () => { if (editorHandle) editorHandle.close(); renderFound(); renderBrief(); toast('Saved into the render queue — brief below.'); },
     onDelete: (m) => { found = found.filter(x => x !== m); if (editorHandle) editorHandle.close(); renderFound(); toast('Short deleted.'); },
   });
+  // Restore the last scan made on this device — unless a Live Now handoff
+  // link just arrived, which always wins.
+  const savedClip = workFor('clipper');
+  if (savedClip && savedClip.payload && (savedClip.payload.found || []).length && !new URLSearchParams(location.search).get('v')) {
+    const p = savedClip.payload;
+    found = p.found || []; videoId = p.videoId || ''; streamTitle = p.streamTitle || ''; durationSec = p.durationSec || 0;
+    quality = p.quality || quality; voiceMode = p.voiceMode || voiceMode;
+    if (p.mode === 'tx') setMode('tx');
+    const tt = $('sc-title'); if (tt && streamTitle) tt.textContent = streamTitle;
+    renderFound();
+  }
 }
 
 /* ---------- Lecture to Revision Clips: find concepts from the source ----------
@@ -1757,17 +1915,11 @@ if (tool === 'lecture-clips') {
     const prog = makeProgress($('prog'), SRC.type === 'youtube' ? ['Reading the lecture', 'Watching the lecture', 'Collecting the concepts', 'Ready'] : ['Reading your material', 'Picking the key sections', 'Ready']);
     try {
       if (SRC.type === 'youtube') {
-        $('lcsteps').classList.remove('hidden');
-        sstep('lcst1', 'now', 'Asking Gemini about this lecture…');
-        sstep('lcst2', '', 'Watching in 10-minute windows');
-        sstep('lcst3', '', 'Collecting the key concepts');
         let durSec = SRC.durationSec || 0;
         if (!durSec) {
-          try { const p = await geminiYouTubeJson(SRC.link, LC_PROBE, { timeoutMs: 120000, onRetry: (info) => sstep('lcst1', 'now', retryMsg(info)) }); durSec = Number(p.durationSec) || 0; } catch { /* windows below still run */ }
+          try { const p = await geminiYouTubeJson(SRC.link, LC_PROBE, { timeoutMs: 120000, onRetry: (info) => prog.setStep(0, retryMsg(info)) }); durSec = Number(p.durationSec) || 0; } catch { /* windows below still run */ }
         }
-        sstep('lcst1', 'ok', durSec ? `Lecture found — ${fmt(durSec)} long` : 'Lecture accepted by Gemini');
-        sstep('lcst2', 'now', 'Watching…');
-        prog.setStep(1);
+        prog.setStep(1, durSec ? `Lecture found — ${fmt(durSec)} long. Watching…` : 'Watching the lecture…');
         const WIN = 600;
         const total = durSec > 0 ? Math.min(durSec, 4 * 3600) : 3600;
         const wins = Math.max(1, Math.ceil(total / WIN));
@@ -1776,10 +1928,10 @@ if (tool === 'lecture-clips') {
         for (let k = 0; k < wins && !beyond; k++) {
           if (k > 0) await breather(prevErr); // pacing between window scans (longer after a limit hit)
           const s = k * WIN, en = Math.min(total, s + WIN);
-          sstep('lcst2', 'now', `Watching ${fmt(s)} – ${fmt(en)} (window ${k + 1} of ${wins})…`);
+          prog.setStep(1, `Watching ${fmt(s)} – ${fmt(en)} (window ${k + 1} of ${wins})`);
           try {
             const d = await geminiYouTubeJson(SRC.link, `Watch ONLY the segment of this lecture you were given (it starts at ${fmt(s)} of the full lecture). Find the key concepts a student must revise. Focus on: ${focus}. Return JSON only: {"beyondEnd": false, "items":[{"title":"concept name","startSec":0,"endSec":0,"why":"one line: why it matters for the exam","hook":"3-6 word memory hook"}]}
-startSec/endSec are seconds FROM THE START OF THIS SEGMENT. Up to 4 concepts per segment, in teaching order; each concept 30-60 seconds. If this segment is past the end of the lecture, return {"beyondEnd": true, "items": []}.`, { startSec: s, endSec: en, onRetry: (info) => sstep('lcst2', 'now', retryMsg(info)) });
+startSec/endSec are seconds FROM THE START OF THIS SEGMENT. Up to 4 concepts per segment, in teaching order; each concept 30-60 seconds. If this segment is past the end of the lecture, return {"beyondEnd": true, "items": []}.`, { startSec: s, endSec: en, onRetry: (info) => prog.setStep(1, retryMsg(info)) });
             if (d.beyondEnd) { beyond = true; break; }
             prevErr = null;
             for (const m of (d.items || [])) {
@@ -1795,12 +1947,10 @@ startSec/endSec are seconds FROM THE START OF THIS SEGMENT. Up to 4 concepts per
           } catch (err) {
             prevErr = err;
             if (k === 0) throw err;
-            sstep('lcst2', 'now', `Window ${k + 1} could not be watched (${err.message}) — continuing…`);
+            prog.setStep(1, `Window ${k + 1} could not be watched (${err.message}) — continuing…`);
           }
         }
-        sstep('lcst2', 'ok', `Watched the lecture — ${items.length} concepts found`);
-        sstep('lcst3', 'ok', 'Concepts listed below, in lecture order');
-        prog.setStep(2);
+        prog.setStep(2, `Watched the lecture — ${items.length} concepts found`);
         out('lcresult', (items.map(conceptCard).join('') || '<div class="outcard">No strong concepts found in this lecture. Try a different focus above.</div>')
           + '<p class="small dim mt">These are the exact moments in the YouTube lecture — tap one to watch it there. To download real clip files, add your own copy of the lecture in Step 3 below and cut each concept there.</p>');
         prog.done();
@@ -1879,12 +2029,26 @@ Exactly ${mcqN} MCQs, ${shortN} short questions and ${longN} long/essay question
       const d = await revisionSheetData(retryNote(b));
       prog.setStep(2);
       mountSheet($('sheetresult'), d, 'revision-sheet');
+      saveWork('notes-sheet', d.title || 'Revision sheet', { data: d });
       prog.done();
       toast('Revision sheet ready — one page, everything that matters.');
     } catch (err) { prog.fail(err.message); toast('Revision sheet failed: ' + err.message, true); }
     busy(b, false, 'Make my revision sheet');
   });
-  /* ----- Ask your lecture ----- */
+  // Restore the last revision sheet (made from either student page).
+  const savedEqSheet = workFor('notes-sheet');
+  if (savedEqSheet && savedEqSheet.payload && savedEqSheet.payload.data) mountSheet($('sheetresult'), savedEqSheet.payload.data, 'revision-sheet');
+  /* ----- Ask your lecture -----
+     The input was an empty box with no sense of what to type — offer
+     one-tap starter questions built from the analysed chapters. */
+  function paintAskChips() {
+    const host = $('askchips'); if (!host) return;
+    const chs = (SRC && SRC.ready && Array.isArray(SRC.chapters)) ? SRC.chapters.slice(0, 3) : [];
+    host.innerHTML = chs.map(c => `<button class="chip" data-ask="${esc(`Explain ${c.title} in simple words`)}">${esc(`Explain ${c.title}`)}</button>`).join('');
+    host.querySelectorAll('[data-ask]').forEach(btn => btn.addEventListener('click', () => { const inp = $('askq'); if (inp) { inp.value = btn.dataset.ask; inp.focus(); } }));
+  }
+  window.addEventListener('sc-src-ready', paintAskChips);
+  paintAskChips();
   const qaHist = [];
   const askLog = $('asklog');
   const addMsg = (text, me) => {
@@ -2027,12 +2191,18 @@ if (tool === 'branding') {
       const chunks = []; rec.ondataavailable = (xx) => chunks.push(xx.data);
       const done = new Promise(r => rec.onstop = r);
       v.currentTime = 0; draw(); await v.play(); rec.start(250);
-      const tick = setInterval(() => { if (prog && v.duration) prog.textContent = `Rendering your branding onto the video… ${Math.round(v.currentTime / v.duration * 100)}%`; }, 300);
-      await new Promise(r => { if (v.ended) return r(); v.addEventListener('ended', () => r(), { once: true }); setTimeout(r, (v.duration + 2) * 1000); });
+      let cancelled = false;
+      const cancelBtn = $('bcancel');
+      if (cancelBtn) { cancelBtn.classList.remove('hidden'); cancelBtn.onclick = () => { cancelled = true; }; }
+      const tick = setInterval(() => { if (prog && v.duration) prog.textContent = `Rendering your branding onto the video… ${fmt(v.currentTime)} of ${fmt(v.duration)} (${Math.round(v.currentTime / v.duration * 100)}%) — keep this tab open`; }, 300);
+      await new Promise(r => { if (v.ended) return r(); v.addEventListener('ended', () => r(), { once: true }); const iv = setInterval(() => { if (cancelled) { clearInterval(iv); r(); } }, 250); setTimeout(() => { clearInterval(iv); r(); }, (v.duration + 2) * 1000); });
       clearInterval(tick); cancelAnimationFrame(raf);
+      if (cancelBtn) cancelBtn.classList.add('hidden');
+      v.pause();
       rec.stop(); await done;
+      if (cancelled) { if (prog) prog.textContent = ''; toast('Export cancelled — nothing was saved.'); busy(b, false, 'Export branded video (WebM)'); return; }
       download('branded-video.webm', new Blob(chunks, { type: 'video/webm' }));
-      saveShort(($('bname').value.trim() || 'Branded clip'), v);
+      saveShort(($('bname').value.trim() || 'Branded clip'), v, 'your-branding');
       if (prog) prog.textContent = `Done — branded video downloaded at ${cv.width}×${cv.height}. Your logo and name are burned into every frame${intro || outro ? ', with your intro/outro text' : ''}.`;
       toast('Branded video exported.');
     } catch (err) { toast('Export failed: ' + err.message, true); if (prog) prog.textContent = ''; }
@@ -2040,3 +2210,6 @@ if (tool === 'branding') {
   });
   apply();
 }
+
+/* Test hook for tests/regression.mjs (not used by the site). */
+export const __test = { parseBriefBatch };
