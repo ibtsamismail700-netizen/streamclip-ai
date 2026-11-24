@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#ffffff">
+<meta name="description" content="One honest article generator with three modes: a topic, up to 10 photos (one article each), or a news headline. Full SEO article with meta, headings and FAQ — you publish it yourself in a minute.">
+<title>Blog Writer | StreamClip AI</title>
+<link rel="stylesheet" href="../css/app.css">
+</head>
+<body data-tool="blogwriter">
+<header class="site-head"><div class="in">
+<a class="logo-badge" href="../index.html" aria-label="StreamClip AI home">S</a>
+<a class="brand-name" href="../index.html">Stream<i>Clip</i> AI</a>
+<nav class="mainnav"><a href="../index.html">Home</a><a href="../index.html#tools">Tools</a><a href="../settings.html">Settings</a><a href="../about.html">About</a><a href="../contact.html">Contact</a><a href="../blog/">Blog</a></nav>
+</div></header>
+<div class="wrap"><p class="small dim mt"><a href="../index.html">← All tools</a></p>
+<h1 class="mt">Blog Writer</h1>
+<p class="sub mt">Three doors into one article writer: a topic, your photos, or a news headline. You get a complete article — and you publish it yourself, because this site never holds your blog login.</p>
+<div id="keyprompt" class="mt"></div>
+<div class="card"><h3>Step 1 — Where the article comes from</h3>
+<div class="tabs"><button class="tab on" id="bwmode-topic">Topic</button><button class="tab" id="bwmode-photo">Photos → articles</button><button class="tab" id="bwmode-news">News</button></div>
+<div id="panel-bw-topic">
+<label class="field"><span>Article topic</span><input class="input" id="bwtopic" placeholder="e.g. How small bakeries get orders from Instagram" autocomplete="off"></label>
+</div>
+<div id="panel-bw-photo" class="hidden">
+<label class="field"><span>Your pictures (up to 10 — one article each)</span><input class="input" type="file" id="bwphotos" accept="image/*" multiple><span class="small dim">Each picture is looked at and written about on its own. Ten pictures is ten articles — and ten rounds of writing, so expect it to take a while on a free key.</span></label>
+</div>
+<div id="panel-bw-news" class="hidden">
+<label class="field"><span>News headline</span><input class="input" id="bwheadline" placeholder="Paste the headline exactly" autocomplete="off"></label>
+<label class="field"><span>Confirmed details (the article uses ONLY these facts)</span><textarea class="input" id="bwdetails" placeholder="Who, where, when, and what is confirmed so far. Anything not written here will not be invented — the article says what is still awaited instead."></textarea></label>
+</div>
+<h3 class="mt2">Step 2 — How it reads</h3>
+<div class="btns two">
+<label class="field"><span>Niche</span><select class="input" id="bwniche"><option>General</option><option>Technology</option><option>Business &amp; money</option><option>Food &amp; recipes</option><option>Health &amp; fitness</option><option>Education</option><option>Travel</option><option>Islamic</option><option>Sports</option></select></label>
+<label class="field"><span>Language</span><select class="input" id="bwlang"><option selected>English</option><option>Urdu</option><option>Hindi</option><option>Roman Urdu</option></select></label>
+</div>
+<div class="btns two">
+<label class="field"><span>Length</span><select class="input" id="bwlen"><option>Short</option><option selected>Medium</option><option>Long</option></select><span class="small dim">Short ≈ 600 words · Medium ≈ 1,200 · Long ≈ 2,000.</span></label>
+<label class="field"><span>Tone</span><select class="input" id="bwtone"><option>Friendly &amp; simple</option><option>Professional</option><option>Newsroom</option><option>Personal blog</option></select></label>
+</div>
+<div class="togglerow mt"><span>Include an FAQ section</span><label class="switch"><input type="checkbox" id="bwfaq" checked><span class="tr"></span></label></div>
+<button class="btn block big mt" id="bwgo">Write my article</button>
+</div>
+<div id="prog"></div>
+<div id="bwresult"></div>
+<div class="card"><h3>Publish it yourself — in one minute</h3>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>Download or copy the article (.md) above.</div></div><div class="stp"><span class="n">2</span><div>Open your blog (Blogger, WordPress — wherever it lives) and start a new post.</div></div><div class="stp"><span class="n">3</span><div>Paste the title, set the meta description as the post's search description, and paste the body — headings arrive as Markdown (# / ##), which most editors convert as you paste, or use any free Markdown-to-HTML converter.</div></div><div class="stp"><span class="n">4</span><div>Read it once with your own eyes, add your photo, and publish. StreamClip does not publish for you — that is the price, and the safety, of never storing your blog password.</div></div></div>
+</div>
+<section class="guide"><h2>How this tool works</h2>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>Pick the source: a <b>topic</b>, up to <b>10 photos</b> (one article written about each), or a <b>news headline + the confirmed details</b>.</div></div><div class="stp"><span class="n">2</span><div>Set the niche, language, length and tone, and whether to include an FAQ section.</div></div><div class="stp"><span class="n">3</span><div>Tap <b>Write my article</b> — you get the full article on screen: title, meta description, intro, headed sections, FAQ and conclusion.</div></div><div class="stp"><span class="n">4</span><div>Copy it or download the .md, then publish it yourself in a minute (steps above).</div></div></div>
+<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>A topic, or 1–10 photos, or a headline with confirmed details</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A complete SEO article: title, meta description, intro, 3–7 headed sections, optional FAQ, conclusion</li><li>Copy + .md download per article</li><li>Photo mode: one article per picture, each with its own downloads</li></ul></div></div></div>
+<h2>Tips</h2><ul><li>Read before you publish — one personal line in the intro lifts an AI draft into your article.</li><li>News mode never invents: if a fact is not in your details box, the article will not claim it.</li><li>Pair every article with the Keyword Finder first — write to a keyword, not into the air.</li></ul>
+<h2>FAQ</h2><div class="faq"><b>Why doesn't it post to my Blogger/WordPress directly?</b><p>That would need your blog login or app password stored here, and scheduled background posting. StreamClip has no accounts and stores no credentials — so you publish in a minute yourself, and your blog stays fully yours.</p></div><div class="faq"><b>Are the articles original?</b><p>They are written fresh for your topic/photos at run time. As with any draft, read and personalise before publishing.</p></div><div class="faq"><b>Photo mode wrote about the wrong thing.</b><p>The article follows what is genuinely visible. A clearer, closer photo writes a better article.</p></div></section>
+
+</div>
+<footer class="site-foot">
+<div class="in">
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a><a href="../tools/podcast-clipper.html">Podcast Clipper</a><a href="../tools/script-to-short.html">Script-to-Short</a><a href="../tools/score-my-short.html">Score My Short</a><a href="../tools/repurpose-pack.html">Repurpose Pack</a><a href="../tools/auto-captions.html">Auto Captions</a><a href="../tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="../tools/profile-picture-maker.html">Profile Picture Maker</a><a href="../tools/viral-hook-translator.html">Viral Hook Translator</a><a href="../tools/dukaan-promo-maker.html">Dukaan Promo Maker</a><a href="../tools/shayari-maker.html">Shayari / Poetry Video Maker</a><a href="../tools/cricket-clip-finder.html">Cricket Clip Finder</a><a href="../tools/news-card-maker.html">News Card Maker</a><a href="../tools/voice-changer-dub.html">Voice Changer Dub</a><a href="../tools/subtitle-burner.html">Subtitle Burner Pack</a><a href="../tools/podcast-to-posts.html">Podcast-to-Posts</a><a href="../tools/ramadan-eid-kit.html">Ramadan / Eid Content Kit</a><a href="../tools/voice-maker.html">Voice Maker</a></div><div><h4>Blog &amp; growth</h4><a href="../tools/blog-writer.html">Blog Writer</a><a href="../tools/keyword-finder.html">Keyword Finder</a><a href="../tools/ai-answer-checker.html">AI Answer Checker</a><a href="../tools/carousel-maker.html">Carousel Maker</a><a href="../tools/pin-maker.html">Pinterest Pin Maker</a><a href="../tools/pin-maker.html#prompts">Pin Prompt Maker</a><a href="../tools/blog-to-reel.html">Blog-to-Reel</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="../tools/mock-test.html">Mock Test</a><a href="../tools/handwritten-notes.html">Handwritten Notes</a><a href="../tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="../index.html">Home</a><a href="../live-now.html">Live Now</a><a href="../blog/">Blog</a><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div></div>
+<p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
+<p class="small dim">© 2026 StreamClip AI</p>
+</div>
+</footer>
+<script type="module" src="../js/site.js"></script>
+<script type="module" src="../js/tools3.js"></script></body></html>

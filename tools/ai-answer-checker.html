@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#ffffff">
+<meta name="description" content="Score any page /100 on whether AI answer engines can find, read and quote it — title, meta, question headings, FAQ schema, llms.txt and robots checks. The score needs no key.">
+<title>AI Answer Checker | StreamClip AI</title>
+<link rel="stylesheet" href="../css/app.css">
+</head>
+<body data-tool="aeocheck">
+<header class="site-head"><div class="in">
+<a class="logo-badge" href="../index.html" aria-label="StreamClip AI home">S</a>
+<a class="brand-name" href="../index.html">Stream<i>Clip</i> AI</a>
+<nav class="mainnav"><a href="../index.html">Home</a><a href="../index.html#tools">Tools</a><a href="../settings.html">Settings</a><a href="../about.html">About</a><a href="../contact.html">Contact</a><a href="../blog/">Blog</a></nav>
+</div></header>
+<div class="wrap"><p class="small dim mt"><a href="../index.html">← All tools</a></p>
+<h1 class="mt">AI Answer Checker</h1>
+<p class="sub mt">Search is becoming answers. This checker scores your page on the signals that decide whether ChatGPT, Gemini and Perplexity can quote it — and tells you the exact fix for every miss. The score itself is free: no key needed.</p>
+<div class="card"><h3>Step 1 — The page</h3>
+<label class="field"><span>Page link</span><input class="input" id="aeurl" placeholder="https://your-site.com/your-page" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="small dim">The page is fetched through this site's own reader (browsers block direct cross-site reads), and the checks run on its real HTML, in your browser.</span></label>
+<button class="btn block big mt" id="aego">Check this page</button>
+</div>
+<div id="prog"></div>
+<div id="aeresult"></div>
+<div class="card hidden" id="pastewrap"><h3>Or paste the page text</h3>
+<p class="small dim">If a site blocks fetching, copy the page's text (or its HTML) and paste it here. The wording checks still run; title/meta/schema checks will show as missing, because pasted text does not carry them.</p>
+<label class="field"><span>Page text or HTML</span><textarea class="input" id="aepaste" placeholder="Paste the page text here…"></textarea></label>
+<button class="btn dark block mt" id="aepastego">Check the pasted text</button>
+</div>
+<section class="guide"><h2>How this tool works</h2>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>Paste any public page link and tap <b>Check this page</b>.</div></div><div class="stp"><span class="n">2</span><div>The checker fetches the page and runs ten deterministic checks: title, meta description, single H1, question-style headings, an early direct answer, FAQ schema, any JSON-LD, list structure, llms.txt, and AI crawlers in robots.txt.</div></div><div class="stp"><span class="n">3</span><div>You get a score /100 with a pass or the exact fix for every signal.</div></div><div class="stp"><span class="n">4</span><div>Optionally, with your Gemini key added, tap <b>Get AI fix suggestions</b> — ordered fixes, a rewritten opening, and a ready-to-paste FAQ schema written only from your page's own content.</div></div></div>
+<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Nothing for the score — it is deterministic and free</li><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free) (only for the optional AI suggestions)</li></ul></div><div class="card"><h3>What you get</h3><ul><li>An AI Answer score /100 with per-check pass/fail</li><li>The exact fix for every failing check</li><li>Optional: AI fix list, rewritten intro, and a copyable FAQPage JSON-LD block</li></ul></div></div></div>
+<h2>Tips</h2><ul><li>Fix in the order shown — title, early answer and question headings move the score most.</li><li>Check your top 3 pages, not all of them; the same fixes usually repeat.</li><li>Re-check after fixing — the score is deterministic, so improvements show immediately.</li></ul>
+<h2>FAQ</h2><div class="faq"><b>Does a high score guarantee AI engines quote me?</b><p>No — it means your page is quotable: readable, structured and allowed. Whether an engine quotes it also depends on authority and competition, which no checker can promise.</p></div><div class="faq"><b>Why did fetching fail?</b><p>Some sites block readers or sit behind logins. The paste mode is the honest fallback — the wording checks still run.</p></div><div class="faq"><b>What is llms.txt?</b><p>A small plain-text file at your site's root that maps your content for AI readers. Most sites do not have one yet — which is exactly why it is an easy win.</p></div></section>
+
+</div>
+<footer class="site-foot">
+<div class="in">
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a><a href="../tools/podcast-clipper.html">Podcast Clipper</a><a href="../tools/script-to-short.html">Script-to-Short</a><a href="../tools/score-my-short.html">Score My Short</a><a href="../tools/repurpose-pack.html">Repurpose Pack</a><a href="../tools/auto-captions.html">Auto Captions</a><a href="../tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="../tools/profile-picture-maker.html">Profile Picture Maker</a><a href="../tools/viral-hook-translator.html">Viral Hook Translator</a><a href="../tools/dukaan-promo-maker.html">Dukaan Promo Maker</a><a href="../tools/shayari-maker.html">Shayari / Poetry Video Maker</a><a href="../tools/cricket-clip-finder.html">Cricket Clip Finder</a><a href="../tools/news-card-maker.html">News Card Maker</a><a href="../tools/voice-changer-dub.html">Voice Changer Dub</a><a href="../tools/subtitle-burner.html">Subtitle Burner Pack</a><a href="../tools/podcast-to-posts.html">Podcast-to-Posts</a><a href="../tools/ramadan-eid-kit.html">Ramadan / Eid Content Kit</a><a href="../tools/voice-maker.html">Voice Maker</a></div><div><h4>Blog &amp; growth</h4><a href="../tools/blog-writer.html">Blog Writer</a><a href="../tools/keyword-finder.html">Keyword Finder</a><a href="../tools/ai-answer-checker.html">AI Answer Checker</a><a href="../tools/carousel-maker.html">Carousel Maker</a><a href="../tools/pin-maker.html">Pinterest Pin Maker</a><a href="../tools/pin-maker.html#prompts">Pin Prompt Maker</a><a href="../tools/blog-to-reel.html">Blog-to-Reel</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="../tools/mock-test.html">Mock Test</a><a href="../tools/handwritten-notes.html">Handwritten Notes</a><a href="../tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="../index.html">Home</a><a href="../live-now.html">Live Now</a><a href="../blog/">Blog</a><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div></div>
+<p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
+<p class="small dim">© 2026 StreamClip AI</p>
+</div>
+</footer>
+<script type="module" src="../js/site.js"></script>
+<script type="module" src="../js/tools3.js"></script></body></html>

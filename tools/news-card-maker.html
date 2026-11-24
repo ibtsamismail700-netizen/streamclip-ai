@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#ffffff">
+<meta name="description" content="Turn a headline into a TV-style breaking-news card — red band, bold headline, your channel name — in Urdu or English, plus AI headline variants and a posting caption.">
+<title>News Card Maker | StreamClip AI</title>
+<link rel="stylesheet" href="../css/app.css">
+</head>
+<body data-tool="newscard">
+<header class="site-head"><div class="in">
+<a class="logo-badge" href="../index.html" aria-label="StreamClip AI home">S</a>
+<a class="brand-name" href="../index.html">Stream<i>Clip</i> AI</a>
+<nav class="mainnav"><a href="../index.html">Home</a><a href="../index.html#tools">Tools</a><a href="../settings.html">Settings</a><a href="../about.html">About</a><a href="../contact.html">Contact</a><a href="../blog/">Blog</a></nav>
+</div></header>
+<div class="wrap"><p class="small dim mt"><a href="../index.html">← All tools</a></p>
+<h1 class="mt">News Card Maker</h1>
+<p class="sub mt">The card every news page runs on: a bold TV-style breaking-news graphic with your headline and channel name. The card itself needs no key — it is drawn on your device.</p>
+<div id="keyprompt" class="mt"></div>
+<div class="card"><h3>Step 1 — The news</h3>
+<label class="field"><span>Headline</span><input class="input" id="ncheadline" placeholder="Write the headline exactly as it should appear" autocomplete="off"></label>
+<label class="field"><span>Details (the 2–3 lines under the headline)</span><textarea class="input" id="ncdetails" placeholder="The key facts — who, where, when. Keep it to what is confirmed."></textarea></label>
+<div class="btns two">
+<label class="field"><span>Your channel / page name</span><input class="input" id="ncchannel" placeholder="e.g. DG Khan News" autocomplete="off"></label>
+<label class="field"><span>Category</span><select class="input" id="nccat"><option>Breaking</option><option>Politics</option><option>Sports</option><option>Weather</option><option>Showbiz</option></select></label>
+</div>
+<div class="btns two">
+<label class="field"><span>Card language</span><select class="input" id="nclang"><option>English</option><option>Urdu</option></select><span class="small dim">Urdu cards use the Urdu band label and right-to-left headline.</span></label>
+<div class="field"><span>Card size</span><div class="chips" id="rg-ncsize"><button class="chip on" data-ncsize="sq">Square 1080×1080</button><button class="chip" data-ncsize="wide">Wide 1200×628</button></div></div>
+</div>
+<div id="ncpreview" class="mt"><canvas id="nccanvas" class="prev" style="width:100%"></canvas></div>
+<div class="btns two mt"><button class="btn big" id="ncdownload">Download the card</button><button class="btn dark big" id="ncai">Improve with AI — variants + caption</button></div>
+<p class="small dim mt">The card redraws live as you type. Only post news you have verified — a card makes a claim look official, so the facts are your responsibility.</p>
+</div>
+<div id="ncresult"></div>
+<section class="guide"><h2>How this tool works</h2>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>Write the headline and the confirmed details, your channel name, and pick the category and language.</div></div><div class="stp"><span class="n">2</span><div>The card draws itself live — adjust the words until it reads like television.</div></div><div class="stp"><span class="n">3</span><div>Tap <b>Download the card</b> for the PNG, ready to post.</div></div><div class="stp"><span class="n">4</span><div>Optionally tap <b>Improve with AI</b> for three headline variants (same facts, different angles) and a posting caption — tap "Use this" to put a variant straight onto the card.</div></div></div>
+<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Nothing for the card itself — it is drawn in your browser</li><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free) (only for the AI variants + caption)</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A TV-style news card PNG (1080×1080 or 1200×628)</li><li>Three AI headline variants + a posting caption</li></ul></div></div></div>
+<h2>Tips</h2><ul><li>Short headlines win: if it does not fit in two breaths, it will not be read on a phone.</li><li>The details lines are where trust is built — who, where, when, and nothing unconfirmed.</li><li>Keep one channel name and stick to it — the bottom bar is your brand.</li></ul>
+<h2>FAQ</h2><div class="faq"><b>Does the card need my Gemini key?</b><p>No. The card is drawn on canvas in your browser. The key is only used if you ask for AI headline variants and a caption.</p></div><div class="faq"><b>The Urdu text looks broken on the card.</b><p>Canvas uses your device's fonts — most Android phones render Urdu correctly. If yours does not, the English card always works.</p></div><div class="faq"><b>Can I add a photo to the card?</b><p>Not in this version — the clean text card is the format TV channels and big pages use for text news.</p></div></section>
+
+</div>
+<footer class="site-foot">
+<div class="in">
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a><a href="../tools/podcast-clipper.html">Podcast Clipper</a><a href="../tools/script-to-short.html">Script-to-Short</a><a href="../tools/score-my-short.html">Score My Short</a><a href="../tools/repurpose-pack.html">Repurpose Pack</a><a href="../tools/auto-captions.html">Auto Captions</a><a href="../tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="../tools/profile-picture-maker.html">Profile Picture Maker</a><a href="../tools/viral-hook-translator.html">Viral Hook Translator</a><a href="../tools/dukaan-promo-maker.html">Dukaan Promo Maker</a><a href="../tools/shayari-maker.html">Shayari / Poetry Video Maker</a><a href="../tools/cricket-clip-finder.html">Cricket Clip Finder</a><a href="../tools/news-card-maker.html">News Card Maker</a><a href="../tools/voice-changer-dub.html">Voice Changer Dub</a><a href="../tools/subtitle-burner.html">Subtitle Burner Pack</a><a href="../tools/podcast-to-posts.html">Podcast-to-Posts</a><a href="../tools/ramadan-eid-kit.html">Ramadan / Eid Content Kit</a><a href="../tools/voice-maker.html">Voice Maker</a></div><div><h4>Blog &amp; growth</h4><a href="../tools/blog-writer.html">Blog Writer</a><a href="../tools/keyword-finder.html">Keyword Finder</a><a href="../tools/ai-answer-checker.html">AI Answer Checker</a><a href="../tools/carousel-maker.html">Carousel Maker</a><a href="../tools/pin-maker.html">Pinterest Pin Maker</a><a href="../tools/pin-maker.html#prompts">Pin Prompt Maker</a><a href="../tools/blog-to-reel.html">Blog-to-Reel</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="../tools/mock-test.html">Mock Test</a><a href="../tools/handwritten-notes.html">Handwritten Notes</a><a href="../tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="../index.html">Home</a><a href="../live-now.html">Live Now</a><a href="../blog/">Blog</a><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div></div>
+<p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
+<p class="small dim">© 2026 StreamClip AI</p>
+</div>
+</footer>
+<script type="module" src="../js/site.js"></script>
+<script type="module" src="../js/tools3.js"></script></body></html>

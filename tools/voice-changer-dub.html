@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#ffffff">
+<meta name="description" content="Say a line, pick a character — old man, villain, news anchor, child-like, woman or man — and an AI voice speaks your line. Honest re-voicing, explained on the page.">
+<title>Voice Changer Dub | StreamClip AI</title>
+<link rel="stylesheet" href="../css/app.css">
+</head>
+<body data-tool="voicechanger">
+<header class="site-head"><div class="in">
+<a class="logo-badge" href="../index.html" aria-label="StreamClip AI home">S</a>
+<a class="brand-name" href="../index.html">Stream<i>Clip</i> AI</a>
+<nav class="mainnav"><a href="../index.html">Home</a><a href="../index.html#tools">Tools</a><a href="../settings.html">Settings</a><a href="../about.html">About</a><a href="../contact.html">Contact</a><a href="../blog/">Blog</a></nav>
+</div></header>
+<div class="wrap"><p class="small dim mt"><a href="../index.html">← All tools</a></p>
+<h1 class="mt">Voice Changer Dub</h1>
+<p class="sub mt">Record your line, pick a character, and hear it spoken back in that character's voice — for skits, comedy videos and dubs.</p>
+<div id="keyprompt" class="mt"></div>
+<div class="note"><div><b>How this honestly works.</b><div class="small dim">No AI can yet filter your real voice into another voice. So this tool does the real thing in two steps: it <b>reads your line</b> (transcribes your recording), then an <b>AI character voice speaks that line</b>. Your recording itself is never altered or uploaded anywhere except to Google for the transcription, with your key.</div></div></div>
+<div class="card"><h3>Step 1 — Your line</h3>
+<div class="btns two">
+<button class="btn" id="vcrec">🎙 Record your line</button>
+<label class="btn dark" style="text-align:center;cursor:pointer">⬆ Upload audio / video<input type="file" id="vcfile" accept="audio/*,video/*" hidden></label>
+</div>
+<p class="small dim mt" id="vcstatus">Record a short line (a sentence or two is perfect), or upload a short clip — up to ~18 MB.</p>
+<button class="btn dark block mt" id="vcread">Read my line</button>
+<label class="field mt"><span>Your line (fix any word before re-voicing)</span><textarea class="input" id="vctext" placeholder="Your line will appear here — you can also type it directly."></textarea></label>
+<h3 class="mt2">Step 2 — Pick the character</h3>
+<div class="chips" id="rg-vcchar"><button class="chip" data-vcchar="oldman">Old man</button><button class="chip" data-vcchar="child">Child-like</button><button class="chip on" data-vcchar="villain">Villain</button><button class="chip" data-vcchar="anchor">News anchor</button><button class="chip" data-vcchar="woman">Woman</button><button class="chip" data-vcchar="man">Man</button></div>
+<button class="btn block big mt" id="vcgo">Re-voice my line</button>
+</div>
+<div id="prog"></div>
+<div id="vcresult"></div>
+<section class="guide"><h2>How this tool works</h2>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>Record your line with the mic button, or upload a short audio/video clip.</div></div><div class="stp"><span class="n">2</span><div>Tap <b>Read my line</b> — Gemini transcribes the words. Check them in the box and fix any mistake (you can also just type a line).</div></div><div class="stp"><span class="n">3</span><div>Pick the character — old man, child-like, villain, news anchor, woman or man.</div></div><div class="stp"><span class="n">4</span><div>Tap <b>Re-voice my line</b> and play or download the result as a .wav for your video.</div></div></div>
+<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>A microphone, or a short recording of the line (up to ~18 MB)</li></ul></div><div class="card"><h3>What you get</h3><ul><li>Your line transcribed to text</li><li>The line spoken by an AI character voice — playable + downloadable .wav</li></ul></div></div></div>
+<h2>Tips</h2><ul><li>Short lines land best — one or two sentences per character voice.</li><li>For comedy skits, record each character's lines separately and cut them together in your editor.</li><li>If the transcription misses a word, just type the correction — the voice reads the box, not the recording.</li></ul>
+<h2>FAQ</h2><div class="faq"><b>Is this my own voice, changed?</b><p>No — and the page says so openly. It is an AI voice speaking your words. A true filter that keeps your performance and changes only the voice is not something Gemini offers.</p></div><div class="faq"><b>Which languages work?</b><p>The transcription and voices handle Urdu, Hindi and English lines. Mixed lines are read as written.</p></div><div class="faq"><b>The mic button does nothing.</b><p>Allow microphone access when the browser asks — or use the upload button instead.</p></div></section>
+
+</div>
+<footer class="site-foot">
+<div class="in">
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a><a href="../tools/podcast-clipper.html">Podcast Clipper</a><a href="../tools/script-to-short.html">Script-to-Short</a><a href="../tools/score-my-short.html">Score My Short</a><a href="../tools/repurpose-pack.html">Repurpose Pack</a><a href="../tools/auto-captions.html">Auto Captions</a><a href="../tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="../tools/profile-picture-maker.html">Profile Picture Maker</a><a href="../tools/viral-hook-translator.html">Viral Hook Translator</a><a href="../tools/dukaan-promo-maker.html">Dukaan Promo Maker</a><a href="../tools/shayari-maker.html">Shayari / Poetry Video Maker</a><a href="../tools/cricket-clip-finder.html">Cricket Clip Finder</a><a href="../tools/news-card-maker.html">News Card Maker</a><a href="../tools/voice-changer-dub.html">Voice Changer Dub</a><a href="../tools/subtitle-burner.html">Subtitle Burner Pack</a><a href="../tools/podcast-to-posts.html">Podcast-to-Posts</a><a href="../tools/ramadan-eid-kit.html">Ramadan / Eid Content Kit</a><a href="../tools/voice-maker.html">Voice Maker</a></div><div><h4>Blog &amp; growth</h4><a href="../tools/blog-writer.html">Blog Writer</a><a href="../tools/keyword-finder.html">Keyword Finder</a><a href="../tools/ai-answer-checker.html">AI Answer Checker</a><a href="../tools/carousel-maker.html">Carousel Maker</a><a href="../tools/pin-maker.html">Pinterest Pin Maker</a><a href="../tools/pin-maker.html#prompts">Pin Prompt Maker</a><a href="../tools/blog-to-reel.html">Blog-to-Reel</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="../tools/mock-test.html">Mock Test</a><a href="../tools/handwritten-notes.html">Handwritten Notes</a><a href="../tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="../index.html">Home</a><a href="../live-now.html">Live Now</a><a href="../blog/">Blog</a><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div></div>
+<p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
+<p class="small dim">© 2026 StreamClip AI</p>
+</div>
+</footer>
+<script type="module" src="../js/site.js"></script>
+<script type="module" src="../js/tools3.js"></script></body></html>
