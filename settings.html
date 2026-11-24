@@ -13,7 +13,7 @@
 <header class="site-head"><div class="in">
 <a class="logo-badge" href="index.html" aria-label="StreamClip AI home">S</a>
 <a class="brand-name" href="index.html">Stream<i>Clip</i> AI</a>
-<nav class="mainnav"><a href="index.html">Home</a><a href="index.html#tools">Tools</a><a href="settings.html">Settings</a><a href="about.html">About</a><a href="contact.html">Contact</a></nav>
+<nav class="mainnav"><a href="index.html">Home</a><a href="index.html#tools">Tools</a><a href="settings.html">Settings</a><a href="about.html">About</a><a href="contact.html">Contact</a><a href="blog/">Blog</a></nav>
 </div></header>
 <div class="wrap"><div class="top"><div class="grow"><h1>Settings</h1><p class="sub">Your key, your browser, your control.</p></div></div>
 <div class="card">
@@ -21,7 +21,7 @@
 <p class="sub mt">StreamClip AI has no AI key of its own. Every AI tool runs on <b>your</b> free Gemini key, sent from your browser directly to Google. Your key is saved only in this browser — never on this site.</p>
 <div id="keylist"></div>
 <label class="field"><span>Paste your Gemini key</span><input class="input" id="keyinput" placeholder="AIza…" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
-<button class="btn block mt" id="addkey">Check and add</button>
+<button class="btn block mt" id="addkey">Add key</button>
 <p class="small dim mt">Each free key has its own separate limit. Add 2–3 keys (from different Google accounts) and the site rotates between them automatically — busy messages become rare. When one key hits its limit it rests for about a minute while the others keep working; the list above shows every key as <b>Active</b> or <b>Resting until</b> the time it can answer again.</p>
 </div>
 <div class="card" id="unlockcard">
@@ -31,16 +31,35 @@
 <button class="btn dark sm mt" id="unlockbtn">Refresh the list from Google</button>
 </div>
 <div class="card">
+<h2>Test my key</h2>
+<p class="sub mt">One tiny real call per kind — text &amp; video, thumbnail images, and AI voices — against the first key in your list, using the same models the tools use. Adding a key never runs a check; this button is the check, whenever you want it.</p>
+<button class="btn block mt" id="testkey">Test my key</button>
+<div id="testresult"></div>
+</div>
+<div class="card">
+<h2>Activity log</h2>
+<p class="sub mt">The last 20 real errors the tools hit on this device — the tool, the time, and Google's own message. If something ever fails, copy this log: it says exactly what happened.</p>
+<div id="actlog"></div>
+<div class="btns two mt"><button class="btn dark sm" id="actcopy">Copy log</button><button class="btn sm" id="actclear">Clear log</button></div>
+</div>
+<div class="card">
+<h2>Your data on this device</h2>
+<p class="sub mt">Everything StreamClip AI keeps lives in this browser: your keys, Your Shorts posters, saved work, your branding kit, lecture handoffs and the activity log. Clearing removes all of it from this browser — nothing exists anywhere else to delete.</p>
+<button class="btn block mt" id="cleardata">Clear all StreamClip AI data from this browser</button>
+</div>
+<div class="card">
 <h2>How to create your Gemini key — step by step</h2>
-<div class="steps-num"><div class="stp"><span class="n">1</span><div>Open Google AI Studio in your browser: go to <b>aistudio.google.com</b>.</div></div><div class="stp"><span class="n">2</span><div>Sign in with any Google (Gmail) account — the same account you use for YouTube is fine.</div></div><div class="stp"><span class="n">3</span><div>Open the API key page: click <b>"Get API key"</b> in the left menu (or go to aistudio.google.com/apikey).</div></div><div class="stp"><span class="n">4</span><div>Click <b>"Create API key"</b>. If it asks, choose "Create API key in new project".</div></div><div class="stp"><span class="n">5</span><div>Google creates your key — a long code starting with <b>AIza</b>. Click the copy icon next to it.</div></div><div class="stp"><span class="n">6</span><div>Come back to this page and paste the key into the box above.</div></div><div class="stp"><span class="n">7</span><div>Tap <b>"Check and add"</b>. Your key is saved in your browser right away, and StreamClip AI then checks it with one tiny call to Google and shows you the result.</div></div><div class="stp"><span class="n">8</span><div>Done. Every AI tool on this site is now unlocked. You can add up to 10 keys — each key has its own separate free limit and the site rotates between them automatically, so 2–3 keys from different Google accounts make busy messages rare.</div></div></div>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>Open Google AI Studio in your browser: go to <b>aistudio.google.com</b>.</div></div><div class="stp"><span class="n">2</span><div>Sign in with any Google (Gmail) account — the same account you use for YouTube is fine.</div></div><div class="stp"><span class="n">3</span><div>Open the API key page: click <b>"Get API key"</b> in the left menu (or go to aistudio.google.com/apikey).</div></div><div class="stp"><span class="n">4</span><div>Click <b>"Create API key"</b>. If it asks, choose "Create API key in new project".</div></div><div class="stp"><span class="n">5</span><div>Google creates your key — a long code starting with <b>AIza</b>. Click the copy icon next to it.</div></div><div class="stp"><span class="n">6</span><div>Come back to this page and paste the key into the box above.</div></div><div class="stp"><span class="n">7</span><div>Tap <b>"Add key"</b>. Your key is saved in your browser right away — no check, no waiting. If a key turns out to be wrong, the first tool you run will say so plainly; you can also press "Test my key" below any time.</div></div><div class="stp"><span class="n">8</span><div>Done. Every AI tool on this site is now unlocked. You can add up to 10 keys — each key has its own separate free limit and the site rotates between them automatically, so 2–3 keys from different Google accounts make busy messages rare.</div></div></div>
 <p class="small dim mt2">The key is free. Google's free limit is large enough for daily clipping and study use. Never share your key with anyone — treat it like a password. If a key ever leaks, delete it in AI Studio and create a new one.</p>
 </div>
 <div class="card"><h3>About StreamClip AI</h3>
 <p class="sub">Free for everyone: no account and no ads in the tools. StreamClip AI talks only to Google Gemini (with your own key) when you run a tool. Clip only streams and videos you own or have permission to use.</p></div></div>
-<footer class="site-foot"><div class="in">
-<div class="cols"><div><h4>Creator tools</h4><a href="tools/stream-clipper.html">Stream Clipper</a><a href="tools/thumbnail-creator.html">Thumbnail Creator</a><a href="tools/upload-video.html">Upload Your Own Video</a><a href="tools/caption-translation.html">Caption Translation</a><a href="tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="tools/your-branding.html">Your Own Branding</a><a href="tools/podcast-clipper.html">Podcast Clipper</a><a href="tools/script-to-short.html">Script-to-Short</a><a href="tools/score-my-short.html">Score My Short</a><a href="tools/repurpose-pack.html">Repurpose Pack</a><a href="tools/auto-captions.html">Auto Captions</a><a href="tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="tools/profile-picture-maker.html">Profile Picture Maker</a></div><div><h4>Student Mode</h4><a href="tools/lecture-clips.html">Lecture to Revision Clips</a><a href="tools/lecture-notes.html">Lecture to Notes</a><a href="tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="tools/presentation-maker.html">Video Presentation Maker</a><a href="tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="tools/mock-test.html">Mock Test</a><a href="tools/handwritten-notes.html">Handwritten Notes</a><a href="tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="settings.html">Settings — Add your Gemini key</a><a href="about.html">About</a><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms</a><a href="contact.html">Contact</a></div></div>
+<footer class="site-foot">
+<div class="in">
+<div class="cols"><div><h4>Creator tools</h4><a href="tools/stream-clipper.html">Stream Clipper</a><a href="tools/thumbnail-creator.html">Thumbnail Creator</a><a href="tools/upload-video.html">Upload Your Own Video</a><a href="tools/caption-translation.html">Caption Translation</a><a href="tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="tools/your-branding.html">Your Own Branding</a><a href="tools/podcast-clipper.html">Podcast Clipper</a><a href="tools/script-to-short.html">Script-to-Short</a><a href="tools/score-my-short.html">Score My Short</a><a href="tools/repurpose-pack.html">Repurpose Pack</a><a href="tools/auto-captions.html">Auto Captions</a><a href="tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="tools/profile-picture-maker.html">Profile Picture Maker</a></div><div><h4>Student Mode</h4><a href="tools/lecture-clips.html">Lecture to Revision Clips</a><a href="tools/lecture-notes.html">Lecture to Notes</a><a href="tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="tools/presentation-maker.html">Video Presentation Maker</a><a href="tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="tools/mock-test.html">Mock Test</a><a href="tools/handwritten-notes.html">Handwritten Notes</a><a href="tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="index.html">Home</a><a href="live-now.html">Live Now</a><a href="blog/">Blog</a><a href="settings.html">Settings — Add your Gemini key</a><a href="about.html">About</a><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms</a><a href="contact.html">Contact</a></div></div>
 <p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
 <p class="small dim">© 2026 StreamClip AI</p>
-</div></footer>
+</div>
+</footer>
 <script type="module" src="js/site.js"></script>
 </body></html>
