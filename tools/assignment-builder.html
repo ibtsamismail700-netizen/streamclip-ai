@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#12100c">
+<meta name="description" content="Student Mode: a structured assignment draft from your topic — or built on your professor's reference PDF — with introduction, headed sections, conclusion and references, ready to download and rewrite in your own words.">
+<title>Assignment Builder | StreamClip AI</title>
+<link rel="stylesheet" href="../css/app.css">
+</head>
+<body data-tool="assignment">
+<header class="site-head"><div class="in">
+<a class="logo-badge" href="../index.html" aria-label="StreamClip AI home">S</a>
+<a class="brand-name" href="../index.html">Stream<i>Clip</i> AI</a>
+<nav class="mainnav"><a href="../index.html">Home</a><a href="../index.html#tools">Tools</a><a href="../settings.html">Settings</a><a href="../about.html">About</a><a href="../contact.html">Contact</a></nav>
+</div></header>
+<div class="wrap"><p class="small dim mt"><a href="../index.html">← All tools</a></p>
+<h1 class="mt">Assignment Builder</h1>
+<p class="sub mt">Student Mode: topic in, structured assignment out — introduction, headed sections, conclusion, references. A proper draft to make your own, not a shortcut around learning.</p>
+<div id="keyprompt" class="mt"></div>
+<div class="card"><h3>Step 1 — Topic &amp; reference</h3>
+<label class="field"><span>Assignment topic</span><input class="input" id="atopic" placeholder="e.g. The causes of the French Revolution" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="small dim">Lead with your topic. If your professor gave a reference PDF, read it below and the draft will follow its topics.</span></label>
+<div class="mt2"><b>Reference PDF (optional)</b>
+<p class="sub">Professors often hand out a PDF and say "follow this". Upload it — the AI reads it, lists its topics, and builds your draft on them.</p>
+<label class="field"><span>Choose the reference PDF</span><input class="input" type="file" id="refpdf" accept="application/pdf"><span class="small dim">Up to about 18 MB. It goes from your browser straight to Google with your key — never to this site.</span></label>
+<button class="btn dark block mt" id="refread">Read reference PDF</button>
+<p class="small dim mt" id="refstatus"></p>
+<div id="reftopics"></div></div></div>
+<div id="prog"></div>
+<div class="card"><h3>Step 2 — Assignment options</h3>
+<div class="btns two">
+<label class="field"><span>Length</span><select class="input" id="alen"><option>Short (~500 words)</option><option selected>Medium (~1000 words)</option><option>Long (~2000 words)</option></select><span class="small dim">Approximate — the real word count is shown on the draft.</span></label>
+<label class="field"><span>Level</span><select class="input" id="alevel"><option>School</option><option selected>College</option><option>University</option></select><span class="small dim">Sets the vocabulary and depth.</span></label>
+</div>
+<div class="btns two">
+<label class="field"><span>Language</span><select class="input" id="alang"><option selected>English</option><option>Urdu</option><option>Hindi</option><option>Roman Urdu</option></select><span class="small dim">Technical terms stay in English in every language.</span></label>
+<div class="field"><span>References section</span><div class="switch on" id="arefs"><b>Include a references list</b><span class="tg"></span></div><span class="small dim">Adds a formatted source list at the end. Always verify each entry before submitting.</span></div>
+</div>
+<button class="btn block big mt" id="ago">Build my assignment</button></div>
+<div id="aresult"></div>
+<section class="guide"><h2>How this tool works</h2>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>Write your assignment topic — or leave the topic to the reference PDF.</div></div><div class="stp"><span class="n">2</span><div>Optional: upload the professor's reference PDF and tap <b>Read reference PDF</b>. Its topics are listed on the page, and the draft follows them in order.</div></div><div class="stp"><span class="n">3</span><div>Choose the length, level and language, and whether to include a references list.</div></div><div class="stp"><span class="n">4</span><div>Tap <b>Build my assignment</b> — you get the full structured draft with its real word count.</div></div><div class="stp"><span class="n">5</span><div>Download it (.md) or copy it — then rewrite it in your own words, add your teacher's examples, and verify the facts and references.</div></div></div>
+<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>An assignment topic — and optionally the reference PDF (up to ~18 MB)</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A structured draft: title, introduction, 3–6 headed sections, conclusion</li><li>An optional formatted references list</li><li>Download (.md) and one-tap copy, with the real word count shown</li></ul></div></div></div>
+<h2>Tips</h2><ul><li>The draft is a starting structure, not a submission. Rewriting it yourself is where the learning — and the marks — are.</li><li>Always check the references list against your library; AI-drafted lists can contain errors.</li><li>Give the topic precisely ("Causes of the French Revolution" beats "History essay") for a tighter draft.</li></ul>
+<h2>FAQ</h2><div class="faq"><b>Is using this cheating?</b><p>Used as intended — structure, starting text, then your own rewrite — it is a study aid like an outline from a tutor. Submitting any AI draft unchanged is against most school rules and this page says so on the result itself.</p></div><div class="faq"><b>What if I only have the PDF, no topic?</b><p>That works: read the PDF and build — the subject is taken from the PDF itself.</p></div><div class="faq"><b>Can it match my professor's structure?</b><p>That is exactly what the reference step is for: the draft follows the PDF's topics in the PDF's own order.</p></div></section>
+</div>
+<footer class="site-foot"><div class="in">
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a><a href="../tools/podcast-clipper.html">Podcast Clipper</a><a href="../tools/script-to-short.html">Script-to-Short</a><a href="../tools/score-my-short.html">Score My Short</a><a href="../tools/repurpose-pack.html">Repurpose Pack</a><a href="../tools/auto-captions.html">Auto Captions</a><a href="../tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="../tools/profile-picture-maker.html">Profile Picture Maker</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="../tools/mock-test.html">Mock Test</a><a href="../tools/handwritten-notes.html">Handwritten Notes</a><a href="../tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
+<p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
+<p class="small dim">© 2026 StreamClip AI</p>
+</div></footer>
+<script type="module" src="../js/site.js"></script>
+<script type="module" src="../js/tools2.js"></script></body></html>

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#12100c">
+<meta name="description" content="Restyle your own selfie into a gaming avatar, anime portrait, professional headshot and more — or describe an avatar from scratch. Pick a version, add a frame ring, and download exact platform sizes for Instagram, TikTok, YouTube, WhatsApp and Facebook.">
+<title>Profile Picture Maker | StreamClip AI</title>
+<link rel="stylesheet" href="../css/app.css">
+</head>
+<body data-tool="profilepic">
+<header class="site-head"><div class="in">
+<a class="logo-badge" href="../index.html" aria-label="StreamClip AI home">S</a>
+<a class="brand-name" href="../index.html">Stream<i>Clip</i> AI</a>
+<nav class="mainnav"><a href="../index.html">Home</a><a href="../index.html#tools">Tools</a><a href="../settings.html">Settings</a><a href="../about.html">About</a><a href="../contact.html">Contact</a></nav>
+</div></header>
+<div class="wrap"><p class="small dim mt"><a href="../index.html">← All tools</a></p>
+<h1 class="mt">Profile Picture Maker</h1>
+<p class="sub mt">Your face, every style: AI restyles your photo (or builds one from your description), you pick the best version, frame it, and download it in exact platform sizes.</p>
+<div id="keyprompt" class="mt"></div>
+<div class="card"><h3>Step 1 — Start from a photo, or a description</h3>
+<div class="tabs mt"><button class="tab on" id="pp-tphoto">📷 Upload your photo</button><button class="tab" id="pp-tdescribe">✎ Describe it</button></div>
+<div id="panel-pp-photo">
+<label class="field"><span>Your photo (a clear selfie works best)</span><input class="input" type="file" id="ppfile" accept="image/*"><span class="small dim">Front-facing, face well lit, no sunglasses. Your photo goes from your browser straight to Google with your key — never to this site. The AI restyles YOUR photo; results are AI-styled versions of it, so keep a clear photo for a recognisable result.</span></label>
+<p class="small dim mt" id="ppstatus"></p>
+<img class="pfp-prev hidden" id="ppprev" alt="Your uploaded photo">
+</div>
+<div id="panel-pp-describe" class="hidden">
+<label class="field"><span>Describe the avatar</span><textarea class="input" id="pprompt" placeholder="e.g. A confident young gamer with headphones around his neck, purple room light behind him…"></textarea><span class="small dim">Who, what they wear, the mood, the setting — two or three sentences is plenty.</span></label>
+</div>
+<h3 class="mt2">Step 2 — Style &amp; finish</h3>
+<div class="field"><span>Style</span><div class="chips" id="rg-pstyle"><button class="chip on" data-pstyle="gaming">Gaming Avatar</button><button class="chip" data-pstyle="anime">Anime</button><button class="chip" data-pstyle="headshot">Professional Headshot</button><button class="chip" data-pstyle="cartoon3d">Cartoon 3D</button><button class="chip" data-pstyle="neon">Neon Cyber</button><button class="chip" data-pstyle="keep">Keep-me-but-better</button></div><span class="small dim">"Keep-me-but-better" keeps you clearly you — clean background and studio light, no costume.</span></div>
+<div class="btns two">
+<div class="field"><span>Versions</span><div class="chips" id="rg-pver"><button class="chip" data-pver="2">2</button><button class="chip on" data-pver="4">4</button></div><span class="small dim">More versions, more choice — and more of your free image allowance.</span></div>
+<div class="field"><span>Background</span><select class="input" id="ppbg"><option value="keep">Keep / fits the style</option><option value="solid">Solid colour</option><option value="blurred">Blurred</option></select><span class="small dim">Baked into the AI picture at generation time.</span></div>
+</div>
+<label class="field hidden" id="ppcolorwrap"><span>Background colour</span><input class="input" type="color" id="ppcolor" value="#3355ff" style="height:52px;padding:6px"></label>
+<div class="field"><span>Frame / ring (applied after generation)</span><div class="chips" id="rg-pframe"><button class="chip" data-pframe="none">None</button><button class="chip on" data-pframe="gradient">Gradient ring</button><button class="chip" data-pframe="rgb">Gaming RGB ring</button><button class="chip" data-pframe="gold">Gold ring</button><button class="chip" data-pframe="neon">Neon glow</button></div><span class="small dim">The ring is drawn onto the picture on canvas — switch it any time and every version re-frames instantly, with no new AI call.</span></div>
+<button class="btn block big mt" id="ppgo">Create my pictures</button></div>
+<div id="prog"></div>
+<div id="ppversions"></div>
+<div id="ppdl"></div>
+<section class="guide"><h2>How this tool works</h2>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>Upload a clear, front-facing photo — or switch to Describe and write the avatar you want.</div></div><div class="stp"><span class="n">2</span><div>Pick a style, how many versions, the background, and a frame ring.</div></div><div class="stp"><span class="n">3</span><div>Tap <b>Create my pictures</b> — each version is generated by the image model; with a photo, the model edits YOUR picture, keeping you recognisable.</div></div><div class="stp"><span class="n">4</span><div>Tap the version you like to pick it. Change the ring any time — every version re-frames instantly on canvas.</div></div><div class="stp"><span class="n">5</span><div>Download your pick in exact sizes: Instagram/TikTok 1080×1080, YouTube 800×800, Facebook 720×720, WhatsApp 640×640.</div></div></div>
+<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>A clear front-facing photo of yourself — or a two-sentence description</li></ul></div><div class="card"><h3>What you get</h3><ul><li>2 or 4 AI-styled versions to pick from</li><li>5 frame rings, applied on canvas after generation</li><li>Square 1:1 masters with exact platform-size downloads</li></ul></div></div></div>
+<h2>Tips</h2><ul><li>A clear, well-lit selfie gives a recognisable result; group photos and sunglasses confuse the model.</li><li>Image generation uses your free image allowance — 2 versions is the economical run while you test a style.</li><li>Professional Headshot + Blurred background is the safe combo for LinkedIn and WhatsApp.</li></ul>
+<h2>FAQ</h2><div class="faq"><b>Does it really use my photo?</b><p>Yes — your photo is sent to the image model as an input and the results are AI-styled versions of it. The "Keep-me-but-better" style changes the least: clean background and studio light, still clearly you.</p></div><div class="faq"><b>Why is the ring separate from the AI?</b><p>So you can change your mind for free. The AI makes the portrait; the ring is drawn on canvas afterwards, and switching rings never spends your image allowance.</p></div><div class="faq"><b>Are the downloads really the stated sizes?</b><p>Yes — every size is rendered fresh on canvas from the full-quality master at exactly those pixels, frame included.</p></div></section>
+</div>
+<footer class="site-foot"><div class="in">
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a><a href="../tools/podcast-clipper.html">Podcast Clipper</a><a href="../tools/script-to-short.html">Script-to-Short</a><a href="../tools/score-my-short.html">Score My Short</a><a href="../tools/repurpose-pack.html">Repurpose Pack</a><a href="../tools/auto-captions.html">Auto Captions</a><a href="../tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="../tools/profile-picture-maker.html">Profile Picture Maker</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="../tools/mock-test.html">Mock Test</a><a href="../tools/handwritten-notes.html">Handwritten Notes</a><a href="../tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
+<p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
+<p class="small dim">© 2026 StreamClip AI</p>
+</div></footer>
+<script type="module" src="../js/site.js"></script>
+<script type="module" src="../js/tools2.js"></script></body></html>

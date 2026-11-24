@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#12100c">
+<meta name="description" content="Upload a video and get real caption files: Gemini transcribes the speech into timed segments, styled your way, and downloadable as .srt and .vtt — with an optional second language.">
+<title>Auto Captions | StreamClip AI</title>
+<link rel="stylesheet" href="../css/app.css">
+</head>
+<body data-tool="autocaptions">
+<header class="site-head"><div class="in">
+<a class="logo-badge" href="../index.html" aria-label="StreamClip AI home">S</a>
+<a class="brand-name" href="../index.html">Stream<i>Clip</i> AI</a>
+<nav class="mainnav"><a href="../index.html">Home</a><a href="../index.html#tools">Tools</a><a href="../settings.html">Settings</a><a href="../about.html">About</a><a href="../contact.html">Contact</a></nav>
+</div></header>
+<div class="wrap"><p class="small dim mt"><a href="../index.html">← All tools</a></p>
+<h1 class="mt">Auto Captions</h1>
+<p class="sub mt">Captions from the video itself — no typing, no transcript hunting. Upload, choose a style, download the .srt.</p>
+<div id="keyprompt" class="mt"></div>
+<div class="card"><h3>Step 1 — Your video</h3>
+<label class="field"><span>Choose the video file</span><input class="input" type="file" id="acfile" accept="video/*"><span class="small dim">Up to about 18 MB — a short, a reel, a clip. The file goes from your browser straight to Google with your key; it is never uploaded to this site.</span></label>
+<p class="small dim mt" id="acstatus"></p>
+<h3 class="mt2">Step 2 — Caption options</h3>
+<div class="btns two">
+<label class="field"><span>Caption style</span><select class="input" id="acstyle"><option value="clean">Clean lines — one cue per spoken segment</option><option value="short">Short lines — max 7 words per cue</option><option value="karaoke">Karaoke — one word per cue</option></select><span class="small dim">Karaoke splits each segment's time evenly across its words — an even-timing estimate, not measured word timing.</span></label>
+<label class="field"><span>Spoken language</span><select class="input" id="aclang"><option>Auto — keep the original language</option><option>English</option><option>Urdu</option><option>Hindi</option><option>Punjabi</option><option>Arabic</option><option>Bengali</option><option>Spanish</option></select><span class="small dim">Auto detects what is spoken. Pick a language if detection ever guesses wrong.</span></label>
+</div>
+<label class="field"><span>Also translate the captions to</span><select class="input" id="aclang2"><option>None</option><option>Urdu</option><option>Hindi</option><option>English</option><option>Punjabi</option><option>Arabic</option><option>Bengali</option><option>Spanish</option></select><span class="small dim">Optional — a second .srt/.vtt in this language, timestamps untouched.</span></label>
+<button class="btn block big mt" id="acgo">Make my captions</button></div>
+<div id="prog"></div>
+<div id="acresult"></div>
+<section class="guide"><h2>How this tool works</h2>
+<div class="steps-num"><div class="stp"><span class="n">1</span><div>Upload your video file (up to ~18 MB).</div></div><div class="stp"><span class="n">2</span><div>Choose the caption style, the spoken language (or Auto), and an optional translation language.</div></div><div class="stp"><span class="n">3</span><div>Tap <b>Make my captions</b> — Gemini listens to the whole video and transcribes it into timed segments.</div></div><div class="stp"><span class="n">4</span><div>Preview the captions on the page, then download the .srt or .vtt — plus the translated pair if you asked for one.</div></div></div>
+<div class="mt2"><div class="cols"><div class="card"><h3>What you need</h3><ul><li>Your free Gemini key added in <a href="../settings.html">Settings</a> (one minute, free)</li><li>A video file with speech in it, up to ~18 MB</li></ul></div><div class="card"><h3>What you get</h3><ul><li>A styled .srt and .vtt, ready for YouTube, TikTok editors and players</li><li>An optional second-language caption pair</li><li>A full on-page preview before you download</li></ul></div></div></div>
+<h2>Tips</h2><ul><li>Timing is segment-level: one cue per spoken segment of a few seconds. That is the honest baseline of AI transcription — check names and numbers, which can be misheard.</li><li>Short-lines style is best for vertical videos; karaoke suits lyric and word-by-word edits.</li><li>For a YouTube video instead of a file, the <a href="repurpose-pack.html">Repurpose Pack</a> generates captions from the link.</li></ul>
+<h2>FAQ</h2><div class="faq"><b>How accurate is the timing?</b><p>Segment timing is honest — each cue covers the seconds that speech was heard. The karaoke style divides a segment's time evenly across its words; it is labelled an estimate because the model does not return measured per-word timing.</p></div><div class="faq"><b>Why the 18 MB limit?</b><p>The file is sent to Gemini directly from your browser as one request; ~18 MB keeps that reliable. Trim longer videos to the part you need captioned.</p></div><div class="faq"><b>SRT or VTT — which do I need?</b><p>SRT works almost everywhere (YouTube uploads, most editors). VTT is the web-player standard. Both are included so you never convert by hand.</p></div></section>
+</div>
+<footer class="site-foot"><div class="in">
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a><a href="../tools/podcast-clipper.html">Podcast Clipper</a><a href="../tools/script-to-short.html">Script-to-Short</a><a href="../tools/score-my-short.html">Score My Short</a><a href="../tools/repurpose-pack.html">Repurpose Pack</a><a href="../tools/auto-captions.html">Auto Captions</a><a href="../tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="../tools/profile-picture-maker.html">Profile Picture Maker</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="../tools/mock-test.html">Mock Test</a><a href="../tools/handwritten-notes.html">Handwritten Notes</a><a href="../tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
+<p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
+<p class="small dim">© 2026 StreamClip AI</p>
+</div></footer>
+<script type="module" src="../js/site.js"></script>
+<script type="module" src="../js/tools2.js"></script></body></html>
