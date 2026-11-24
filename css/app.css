@@ -692,3 +692,6 @@ a.tile{text-decoration:none;color:inherit}
 .prog .pmsg { color: #c22727; }
 /* Editor phone frame keeps a black screen (it is a video), light bezel. */
 .stage { box-shadow: 0 0 0 4px #e7e0cb, 0 10px 0 #ded5bd, 0 28px 40px -18px rgba(23, 20, 8, .35); }
+.input { border-color: var(--line); box-shadow: 0 2px 0 rgba(23, 20, 8, .05) inset; }
+.moment .time { color: #8f6600; }
+.check { border-color: rgba(23, 20, 8, .28); }
