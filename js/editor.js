@@ -266,7 +266,9 @@ export function initEditor(ctx) {
     else { $('ed-novid-title').textContent = m.title || ''; $('ed-novid-why').textContent = m.why || ''; $('ed-novid-hook').textContent = m.hook || ''; }
     syncControls();
     applyFrame(); applyCaption(); applyTopText(); renderOverlays(); renderOvList();
-    $('ed-ready').textContent = ctx.pickedCount() ? `${ctx.pickedCount()} shorts are ready` : '';
+    const readyEl = $('ed-ready');
+    readyEl.textContent = ctx.pickedCount() ? `${ctx.pickedCount()} short${ctx.pickedCount() > 1 ? 's are' : ' is'} ready — see the render queue brief ↓` : '';
+    readyEl.classList.toggle('hidden', !ctx.pickedCount());
     $('editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (!b.postCaption && !b._capTried && hasKey()) { b._capTried = true; genCaption(false); }
   }

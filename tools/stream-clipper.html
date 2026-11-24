@@ -14,7 +14,7 @@
 <header class="site-head"><div class="in">
 <a class="logo-badge" href="../index.html" aria-label="StreamClip AI home">S</a>
 <a class="brand-name" href="../index.html">Stream<i>Clip</i> AI</a>
-<nav class="mainnav"><a href="../index.html">Home</a><a href="../index.html#tools">Tools</a><a href="../settings.html">Settings</a><a href="../about.html">About</a><a href="../contact.html">Contact</a></nav>
+<nav class="mainnav"><a href="../index.html">Home</a><a href="../index.html#tools">Tools</a><a href="../settings.html">Settings</a><a href="../about.html">About</a><a href="../contact.html">Contact</a><a href="../blog/">Blog</a></nav>
 </div></header>
 <div class="wrap"><p class="small dim mt"><a href="../index.html">← All tools</a></p>
 <h1 class="mt">Stream Clipper</h1>
@@ -61,11 +61,7 @@
 </div>
 <label class="slider"><div class="spread"><span>Minimum viral score</span><b id="cminv">70</b></div><input type="range" id="cmin" min="40" max="95" step="1" value="70"><span class="small dim">Only moments scoring at least this get pre-picked. 70 is a good start.</span></label>
 <button class="btn block big mt" id="scan">✦ Start scanning</button>
-<div class="steps hidden" id="scansteps">
-<div class="step" id="st1"><span class="dot">1</span><span>Asking Gemini about this video…</span></div>
-<div class="step" id="st2"><span class="dot">2</span><span>Watching in 10-minute windows and scoring moments</span></div>
-<div class="step" id="st3"><span class="dot">3</span><span>Ranking and pre-picking the best</span></div>
-</div></div>
+</div>
 <div id="scanprog"></div>
 <div id="ytsummary"></div>
 <div id="ytmoments"></div>
@@ -84,7 +80,7 @@
 <label class="slider"><div class="spread"><span>Minimum viral score</span><b id="tminv">70</b></div><input type="range" id="tmin" min="40" max="95" step="1" value="70"><span class="small dim">Raise it for only the very strongest moments.</span></label>
 </div>
 <button class="btn block big mt" id="tscan">Find best moments</button>
-<p class="small dim mt" id="txstatus"></p></div>
+<div id="txprog"></div></div>
 <div id="txsummary"></div>
 <div id="txmoments"></div>
 <div id="txmake"></div>
@@ -183,21 +179,32 @@
 <div class="btns two mt"><button class="btn dark" id="ed-top-gen">Generate caption</button><button class="btn dark" id="ed-top-copy">⧉ Copy caption</button></div>
 </div>
 </div>
-<button class="btn block big mt" id="ed-make">✦ Make the video</button>
+<p class="small dim mt">This saves the clip — with every choice above — into the render-queue brief at the bottom of the page. No video file is rendered here yet.</p>
+<button class="btn block big mt" id="ed-make">Save to render queue</button>
 <button class="btn dark block mt" id="ed-delete">🗑 Delete this short</button>
-<p class="small dim mt" id="ed-ready"></p>
-<div class="note mt"><div><b>Honest note.</b><div class="small dim">The preview above plays the real scene from YouTube, with your frame, caption and top-text choices laid over it. "Make the video" saves this clip — with every choice above — into the render queue brief. The downloadable rendered file itself is made by the render engine, which this website does not run yet, so nothing is rendered or downloaded here.</div></div></div>
+<button class="btn dark block mt hidden" id="ed-ready" type="button"></button>
+<div class="note mt"><div><b>Honest note.</b><div class="small dim">The preview above plays the real scene from YouTube, with your frame, caption and top-text choices laid over it. The downloadable rendered file itself is made by the render engine, which this website does not run yet, so nothing is rendered or downloaded here.</div></div></div>
 </section>
 
 <section class="guide"><h2>How this tool works</h2>
 <div class="steps-num"><div class="stp"><span class="n">1</span><div>For YouTube: paste the stream link — Gemini watches the video itself on Google's side, in 10-minute windows. For Twitch or private videos: use the Transcript tab and paste the transcript.</div></div><div class="stp"><span class="n">2</span><div>Set up the scan: what part to scan, the short length, how many shorts, an AI voice if you want one, plus the stream type and clip style so the AI scores the right kind of moments.</div></div><div class="stp"><span class="n">3</span><div>Tap "Start scanning" — moments appear live as each part is watched/read, each scored 0–99 with a title, hook and reason.</div></div><div class="stp"><span class="n">4</span><div>The best moments (above your minimum score) are pre-picked. Change any pick, open a picked moment in the editor to frame, cut, caption and finish it, then tap "Make N shorts" to save the picked briefs.</div></div><div class="stp"><span class="n">5</span><div>Cut those timestamps from the stream video (or upload the recording in Upload Your Own Video) and post.</div></div></div>
-<div class="mt2"><div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a><a href="../tools/podcast-clipper.html">Podcast Clipper</a><a href="../tools/script-to-short.html">Script-to-Short</a><a href="../tools/score-my-short.html">Score My Short</a><a href="../tools/repurpose-pack.html">Repurpose Pack</a><a href="../tools/auto-captions.html">Auto Captions</a><a href="../tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="../tools/profile-picture-maker.html">Profile Picture Maker</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="../tools/mock-test.html">Mock Test</a><a href="../tools/handwritten-notes.html">Handwritten Notes</a><a href="../tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div></div>
+<div class="mt2"><div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a><a href="../tools/podcast-clipper.html">Podcast Clipper</a><a href="../tools/script-to-short.html">Script-to-Short</a><a href="../tools/score-my-short.html">Score My Short</a><a href="../tools/repurpose-pack.html">Repurpose Pack</a><a href="../tools/auto-captions.html">Auto Captions</a><a href="../tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="../tools/profile-picture-maker.html">Profile Picture Maker</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="../tools/mock-test.html">Mock Test</a><a href="../tools/handwritten-notes.html">Handwritten Notes</a><a href="../tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a><a href="../blog/">Blog</a></div></div></div>
+<h2>What a result looks like</h2>
+<p class="sub">A scan returns scored moment cards like this one (example):</p>
+<div class="outcard moment"><div><span class="time">12:04 to 12:41 · 37s</span><h3>Impossible clutch — 1 HP and no armour</h3></div>
+<div class="score">94</div>
+<p class="why">The round looks lost, then flips in five seconds — viewers who never saw the stream still get it instantly.</p>
+<p class="why"><span class="tag y">Hook</span> "He had ONE health point…"</p>
+<p class="why"><a href="https://www.youtube.com/results?search_query=live+stream" target="_blank" rel="noopener">▶ Watch this scene</a> — every real card links to the exact second in the stream, so you can verify the moment before you cut it.</p>
+<div class="acts"><span class="chip on">✓ Picked</span></div></div>
 <h2>Tips</h2><ul><li>Match the stream type honestly — a podcast scored like a gaming stream gives odd picks.</li><li>Pick moments that make sense to someone who never watched the stream.</li><li>Post the strongest moment first while you cut the rest.</li></ul>
 <h2>FAQ</h2><div class="faq"><b>Can the site download the video from my link and cut it?</b><p>No — downloading from YouTube/Twitch needs a server-side downloader engine, which a browser-only website cannot run. What changed: Gemini now watches the YouTube video itself from the link to find the moments. Cutting the file itself is done in Upload Your Own Video.</p></div><div class="faq"><b>What makes a moment score high?</b><p>Big reactions, clutch plays, fails, arguments, reveals and punchlines — moments that stand alone without context.</p></div></section></div>
-<footer class="site-foot"><div class="in">
-<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
+<footer class="site-foot">
+<div class="in">
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a><a href="../tools/podcast-clipper.html">Podcast Clipper</a><a href="../tools/script-to-short.html">Script-to-Short</a><a href="../tools/score-my-short.html">Score My Short</a><a href="../tools/repurpose-pack.html">Repurpose Pack</a><a href="../tools/auto-captions.html">Auto Captions</a><a href="../tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="../tools/profile-picture-maker.html">Profile Picture Maker</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="../tools/mock-test.html">Mock Test</a><a href="../tools/handwritten-notes.html">Handwritten Notes</a><a href="../tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="../index.html">Home</a><a href="../live-now.html">Live Now</a><a href="../blog/">Blog</a><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
 <p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
 <p class="small dim">© 2026 StreamClip AI</p>
-</div></footer>
+</div>
+</footer>
 <script type="module" src="../js/site.js"></script>
 <script type="module" src="../js/tools.js"></script></body></html>

@@ -13,7 +13,7 @@
 <header class="site-head"><div class="in">
 <a class="logo-badge" href="../index.html" aria-label="StreamClip AI home">S</a>
 <a class="brand-name" href="../index.html">Stream<i>Clip</i> AI</a>
-<nav class="mainnav"><a href="../index.html">Home</a><a href="../index.html#tools">Tools</a><a href="../settings.html">Settings</a><a href="../about.html">About</a><a href="../contact.html">Contact</a></nav>
+<nav class="mainnav"><a href="../index.html">Home</a><a href="../index.html#tools">Tools</a><a href="../settings.html">Settings</a><a href="../about.html">About</a><a href="../contact.html">Contact</a><a href="../blog/">Blog</a></nav>
 </div></header>
 <div class="wrap"><p class="small dim mt"><a href="../index.html">← All tools</a></p>
 <h1 class="mt">Exam Prep — Questions &amp; Ask</h1>
@@ -26,19 +26,11 @@
 <div id="panel-src-yt">
 <label class="field"><span>Lecture link</span><input class="input" id="srclink" placeholder="youtube.com/watch?v=…" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="small dim">Gemini watches the lecture itself — no transcript copying needed.</span></label>
 <button class="btn block big mt" id="scanbtn">Analyse lecture</button>
-<div class="steps hidden" id="scansteps">
-<div class="step" id="ss1"><span class="dot">1</span><span>Reading the lecture link</span></div>
-<div class="step" id="ss2"><span class="dot">2</span><span>Gemini watches the lecture</span></div>
-<div class="step" id="ss3"><span class="dot">3</span><span>Mapping the topics in order</span></div>
-</div></div>
+</div>
 <div id="panel-src-pdf" class="hidden">
 <label class="field"><span>Choose the PDF</span><input class="input" type="file" id="srcpdf" accept="application/pdf"><span class="small dim">Up to about 18 MB. The file goes from your browser straight to Google with your key — it is never uploaded to this site.</span></label>
 <button class="btn block big mt" id="readpdf">Analyse PDF</button>
-<div class="steps hidden" id="pdfsteps">
-<div class="step" id="ps1"><span class="dot">1</span><span>Reading the PDF file</span></div>
-<div class="step" id="ps2"><span class="dot">2</span><span>Extracting the full text</span></div>
-<div class="step" id="ps3"><span class="dot">3</span><span>Finding the sections</span></div>
-</div>
+
 <p class="small dim mt" id="pdfstatus"></p></div>
 <div id="panel-src-text" class="hidden">
 <label class="field"><span>Paste notes, a chapter, or a lecture transcript</span><textarea class="input" id="srctext" placeholder="Paste the text here…"></textarea></label>
@@ -49,6 +41,7 @@
 </div>
 <div id="prog"></div>
 <div class="card"><h3>Exam questions — practice for your test</h3>
+<p class="small dim" id="needsrc">Add your lecture in Step 1 first (link, PDF or text) — the tools on this page then work on that material.</p>
 <p class="sub">MCQs with an answer key you reveal when ready, short questions with model answers, and long questions with outline answers — all from your material, nothing invented.</p>
 <div class="btns two">
 <label class="field"><span>Difficulty</span><select class="input" id="eqdiff"><option>Easy</option><option selected>Medium</option><option>Hard</option></select><span class="small dim">Hard mixes in the traps examiners love.</span></label>
@@ -65,6 +58,7 @@
 <div class="chatbox">
 <div class="chatlog" id="asklog"></div>
 <label class="field"><span>Your question</span><input class="input" id="askq" placeholder="e.g. Why does the mitochondria matter?"></label>
+<div class="chips" id="askchips"></div>
 <button class="btn block big" id="askgo">Ask</button>
 <p class="small dim">Honest limit: for very long PDFs, the text is trimmed to what fits in one AI call, so an answer about the very end of a huge document may be out of reach. Your questions stay on this page — nothing is saved.</p>
 </div></div>
@@ -78,14 +72,16 @@
 </div></div>
 <section class="guide"><h2>How this page works</h2>
 <div class="steps-num"><div class="stp"><span class="n">1</span><div>Add your source — a YouTube lecture link, a PDF, or pasted text — and tap <b>Analyse</b> once. If you already analysed this lecture in Notes or Flashcards, it arrives here loaded.</div></div><div class="stp"><span class="n">2</span><div><b>Exam questions:</b> pick difficulty and count, generate, then try each question before revealing its answer — the way real revision works.</div></div><div class="stp"><span class="n">3</span><div><b>Revision sheet:</b> one designed page with everything that matters — switch its design, download the picture, or print it.</div></div><div class="stp"><span class="n">4</span><div><b>Ask your lecture:</b> type any question about the material. Answers come only from your lecture/PDF — never from general knowledge dressed up as your teacher's words.</div></div></div>
-<div class="mt2"><div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a><a href="../tools/podcast-clipper.html">Podcast Clipper</a><a href="../tools/script-to-short.html">Script-to-Short</a><a href="../tools/score-my-short.html">Score My Short</a><a href="../tools/repurpose-pack.html">Repurpose Pack</a><a href="../tools/auto-captions.html">Auto Captions</a><a href="../tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="../tools/profile-picture-maker.html">Profile Picture Maker</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="../tools/mock-test.html">Mock Test</a><a href="../tools/handwritten-notes.html">Handwritten Notes</a><a href="../tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div></div>
+<div class="mt2"><div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a><a href="../tools/podcast-clipper.html">Podcast Clipper</a><a href="../tools/script-to-short.html">Script-to-Short</a><a href="../tools/score-my-short.html">Score My Short</a><a href="../tools/repurpose-pack.html">Repurpose Pack</a><a href="../tools/auto-captions.html">Auto Captions</a><a href="../tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="../tools/profile-picture-maker.html">Profile Picture Maker</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="../tools/mock-test.html">Mock Test</a><a href="../tools/handwritten-notes.html">Handwritten Notes</a><a href="../tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a><a href="../blog/">Blog</a></div></div></div>
 <h2>Tips</h2><ul><li>Cover the answer key with your hand and answer out loud first — reveal only after.</li><li>Regenerate at Hard a few days before the exam; the traps repeat in real papers.</li><li>Ask "why" and "how" questions — they expose the gaps MCQs hide.</li></ul>
 <h2>FAQ</h2><div class="faq"><b>Are the answers guaranteed correct?</b><p>They are generated strictly from your material, and the model answers follow it closely — but always trust your teacher's notes over any AI output in a conflict.</p></div><div class="faq"><b>Why did the tutor say "not covered"?</b><p>Because your lecture/document genuinely does not cover that question. That honesty is the point — it never invents an answer.</p></div></section></div>
-<footer class="site-foot"><div class="in">
-<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
+<footer class="site-foot">
+<div class="in">
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a><a href="../tools/podcast-clipper.html">Podcast Clipper</a><a href="../tools/script-to-short.html">Script-to-Short</a><a href="../tools/score-my-short.html">Score My Short</a><a href="../tools/repurpose-pack.html">Repurpose Pack</a><a href="../tools/auto-captions.html">Auto Captions</a><a href="../tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="../tools/profile-picture-maker.html">Profile Picture Maker</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="../tools/mock-test.html">Mock Test</a><a href="../tools/handwritten-notes.html">Handwritten Notes</a><a href="../tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="../index.html">Home</a><a href="../live-now.html">Live Now</a><a href="../blog/">Blog</a><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
 <p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
 <p class="small dim">© 2026 StreamClip AI</p>
-</div></footer>
+</div>
+</footer>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script type="module" src="../js/site.js"></script>
 <script type="module" src="../js/tools.js"></script></body></html>

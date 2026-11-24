@@ -13,7 +13,7 @@
 <header class="site-head"><div class="in">
 <a class="logo-badge" href="../index.html" aria-label="StreamClip AI home">S</a>
 <a class="brand-name" href="../index.html">Stream<i>Clip</i> AI</a>
-<nav class="mainnav"><a href="../index.html">Home</a><a href="../index.html#tools">Tools</a><a href="../settings.html">Settings</a><a href="../about.html">About</a><a href="../contact.html">Contact</a></nav>
+<nav class="mainnav"><a href="../index.html">Home</a><a href="../index.html#tools">Tools</a><a href="../settings.html">Settings</a><a href="../about.html">About</a><a href="../contact.html">Contact</a><a href="../blog/">Blog</a></nav>
 </div></header>
 <div class="wrap"><p class="small dim mt"><a href="../index.html">← All tools</a></p>
 <h1 class="mt">Flashcards + Quiz</h1>
@@ -26,19 +26,11 @@
 <div id="panel-src-yt">
 <label class="field"><span>Lecture link</span><input class="input" id="srclink" placeholder="youtube.com/watch?v=…" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="small dim">Gemini watches the lecture itself — no transcript copying needed.</span></label>
 <button class="btn block big mt" id="scanbtn">Analyse lecture</button>
-<div class="steps hidden" id="scansteps">
-<div class="step" id="ss1"><span class="dot">1</span><span>Reading the lecture link</span></div>
-<div class="step" id="ss2"><span class="dot">2</span><span>Gemini watches the lecture</span></div>
-<div class="step" id="ss3"><span class="dot">3</span><span>Mapping the topics in order</span></div>
-</div></div>
+</div>
 <div id="panel-src-pdf" class="hidden">
 <label class="field"><span>Choose the PDF</span><input class="input" type="file" id="srcpdf" accept="application/pdf"><span class="small dim">Up to about 18 MB. The file goes from your browser straight to Google with your key — it is never uploaded to this site.</span></label>
 <button class="btn block big mt" id="readpdf">Analyse PDF</button>
-<div class="steps hidden" id="pdfsteps">
-<div class="step" id="ps1"><span class="dot">1</span><span>Reading the PDF file</span></div>
-<div class="step" id="ps2"><span class="dot">2</span><span>Extracting the full text</span></div>
-<div class="step" id="ps3"><span class="dot">3</span><span>Finding the sections</span></div>
-</div>
+
 <p class="small dim mt" id="pdfstatus"></p></div>
 <div id="panel-src-text" class="hidden">
 <label class="field"><span>Paste notes, a chapter, or a lecture transcript</span><textarea class="input" id="srctext" placeholder="Paste the text here…"></textarea></label>
@@ -49,6 +41,7 @@
 </div>
 <div id="prog"></div>
 <div class="card"><h3>Step 2 — Deck &amp; quiz size</h3>
+<p class="small dim" id="needsrc">Add your lecture in Step 1 first (link, PDF or text) — the options below then work on that material.</p>
 <div class="btns three">
 <label class="field"><span>Flashcards</span><select class="input" id="fccount"><option>6</option><option selected>8</option><option>12</option><option>16</option></select><span class="small dim">One card per key idea.</span></label>
 <label class="field"><span>Quiz questions</span><select class="input" id="fqcount"><option>5</option><option selected>6</option><option>10</option></select><span class="small dim">4 options each, scored live.</span></label>
@@ -66,13 +59,15 @@
 </div></div>
 <section class="guide"><h2>How this tool works</h2>
 <div class="steps-num"><div class="stp"><span class="n">1</span><div>Add your source — a YouTube lecture link, a PDF, or pasted text — and tap <b>Analyse</b> once.</div></div><div class="stp"><span class="n">2</span><div>Choose your deck size, quiz size and difficulty, then tap the button: the AI builds them from your material only.</div></div><div class="stp"><span class="n">3</span><div>Tap a flashcard to flip it; use Previous/Next to move through the deck.</div></div><div class="stp"><span class="n">4</span><div>Answer the quiz by tapping an option — right and wrong answers are marked instantly, with the reason.</div></div></div>
-<div class="mt2"><div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a><a href="../tools/podcast-clipper.html">Podcast Clipper</a><a href="../tools/script-to-short.html">Script-to-Short</a><a href="../tools/score-my-short.html">Score My Short</a><a href="../tools/repurpose-pack.html">Repurpose Pack</a><a href="../tools/auto-captions.html">Auto Captions</a><a href="../tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="../tools/profile-picture-maker.html">Profile Picture Maker</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="../tools/mock-test.html">Mock Test</a><a href="../tools/handwritten-notes.html">Handwritten Notes</a><a href="../tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div></div>
+<div class="mt2"><div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a><a href="../tools/podcast-clipper.html">Podcast Clipper</a><a href="../tools/script-to-short.html">Script-to-Short</a><a href="../tools/score-my-short.html">Score My Short</a><a href="../tools/repurpose-pack.html">Repurpose Pack</a><a href="../tools/auto-captions.html">Auto Captions</a><a href="../tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="../tools/profile-picture-maker.html">Profile Picture Maker</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="../tools/mock-test.html">Mock Test</a><a href="../tools/handwritten-notes.html">Handwritten Notes</a><a href="../tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a><a href="../blog/">Blog</a></div></div></div>
 <h2>Tips</h2><ul><li>Do the flashcards first, then the quiz — in that order.</li><li>Regenerate with a different chapter for a fresh deck.</li><li>Say flashcard answers out loud before flipping; active recall beats reading.</li></ul>
-<h2>FAQ</h2><div class="faq"><b>Are the questions from my material or from general knowledge?</b><p>From your material only — the generator is instructed to stay exact to the lecture or PDF you analysed.</p></div><div class="faq"><b>Can I save the deck?</b><p>Download it as a text file from the deck, or just regenerate — it takes seconds with the same analysed source.</p></div></section></div>
-<footer class="site-foot"><div class="in">
-<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a></div><div><h4>Site</h4><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
+<h2>FAQ</h2><div class="faq"><b>Are the questions from my material or from general knowledge?</b><p>From your material only — the generator is instructed to stay exact to the lecture or PDF you analysed.</p></div><div class="faq"><b>Can I save the deck?</b><p>Yes — the deck and quiz are kept on this device and reopen with the page, and you can also download the deck as a text file.</p></div></section></div>
+<footer class="site-foot">
+<div class="in">
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a><a href="../tools/podcast-clipper.html">Podcast Clipper</a><a href="../tools/script-to-short.html">Script-to-Short</a><a href="../tools/score-my-short.html">Score My Short</a><a href="../tools/repurpose-pack.html">Repurpose Pack</a><a href="../tools/auto-captions.html">Auto Captions</a><a href="../tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="../tools/profile-picture-maker.html">Profile Picture Maker</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="../tools/mock-test.html">Mock Test</a><a href="../tools/handwritten-notes.html">Handwritten Notes</a><a href="../tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="../index.html">Home</a><a href="../live-now.html">Live Now</a><a href="../blog/">Blog</a><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
 <p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
 <p class="small dim">© 2026 StreamClip AI</p>
-</div></footer>
+</div>
+</footer>
 <script type="module" src="../js/site.js"></script>
 <script type="module" src="../js/tools.js"></script></body></html>
