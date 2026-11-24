@@ -187,7 +187,7 @@ if (keyList) {
         if (!v) return '';
         const state = v.state === 'working' ? `<span class="tag ok">Working</span><span class="small dim">${esc(v.model || '')}</span>`
           : v.state === 'resting' ? `<span class="tag rest">Resting until ${fmtClock(v.until)}</span>`
-          : `<span class="tag" style="background:rgba(255,91,79,.16);color:#ff9a92">Error</span><span class="small dim">${esc(v.message || '')}</span>`;
+          : `<span class="tag" style="background:rgba(217,43,32,.12);color:#c22727">Error</span><span class="small dim">${esc(v.message || '')}</span>`;
         return `<div class="spread mt"><span><b>${names[k]}</b></span><span class="spread" style="gap:8px">${state}</span></div>`;
       };
       if (host) host.innerHTML = row('text') + row('image') + row('tts') + '<p class="small dim mt">The test uses your first key and one tiny call per kind — the same calls the tools make. A "Resting" result means Google has paused that kind on this key for now; the other keys keep working.</p>';
