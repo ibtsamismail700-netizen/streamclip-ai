@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#12100c">
+<meta name="description" content="Per-minute vs per-day free limits explained in plain words — why AI tools say busy, what resting means, and how key rotation and multiple keys keep you working.">
+<title>Free limits explained: why AI tools say "busy" and how multiple keys help | StreamClip AI Blog</title>
+<link rel="stylesheet" href="../css/app.css">
+</head>
+<body>
+<header class="site-head"><div class="in">
+<a class="logo-badge" href="../index.html" aria-label="StreamClip AI home">S</a>
+<a class="brand-name" href="../index.html">Stream<i>Clip</i> AI</a>
+<nav class="mainnav"><a href="../index.html">Home</a><a href="../index.html#tools">Tools</a><a href="../settings.html">Settings</a><a href="../about.html">About</a><a href="../contact.html">Contact</a><a href="../blog/">Blog</a></nav>
+</div></header>
+<div class="wrap"><p class="small dim mt"><a href="../blog/">← Blog</a> · <span class="tag y">Guides</span> · 24 November 2026</p>
+<h1 class="mt">Free limits explained: why AI tools say "busy" and how multiple keys help</h1>
+
+<p class="sub mt">Every free AI tool eventually says some version of "busy" or "limit reached". It is not the tool being lazy — it is Google's free tier doing exactly what it is designed to do. Understanding the two kinds of limits turns a confusing error into a simple choice.</p>
+<h2>The free tier, in plain words</h2>
+<p class="sub mt">Google gives every account a free allowance for the Gemini API. The allowance is counted <b>per model</b> and <b>per key</b>, and it has two separate clocks:</p>
+<ul class="sub mt"><li><b>Per-minute limits</b> — how many requests (and how much content) a key can send in one minute. Burst through it and Google pauses that model on that key for a short rest — usually about a minute.</li><li><b>Per-day limits</b> — how much a key can use in a whole day. Spend it and that model on that key is done until the daily reset.</li></ul>
+<p class="sub mt">Different models have different allowances, which is why one feature can be resting while another works fine.</p>
+<h2>Why tools used to say just "Google is busy"</h2>
+<p class="sub mt">A raw limit error does not say which clock ran out. Older tool designs retried blindly and showed a generic busy message — leaving you unable to tell "wait sixty seconds" from "done for today". StreamClip AI reads the real error and tells you the truth: <i>"Free limit reached — wait a minute, or add another key in Settings"</i> for the short clock, and <i>"Today's free limit on this key is finished — it resets tomorrow"</i> for the daily one.</p>
+<h2>How StreamClip AI rides out limits</h2>
+<ul class="sub mt"><li><b>Cooldown memory.</b> When a model on a key hits a limit, that pair is marked resting and is not retried inside its window — no wasted calls, no error spam.</li><li><b>Rotation.</b> Other models and other keys take over automatically, mid-job if needed.</li><li><b>Pacing.</b> Bulk jobs (many versions, long translations, window-by-window scans) space their calls out and prefer lighter models, so they sip the allowance instead of gulping it.</li><li><b>One honest wait.</b> If everything is resting briefly, the tool waits once for the earliest reset and says so — instead of flashing "busy" over and over.</li><li><b>A notice before you start.</b> When every model for a tool's kind is resting, the tool page shows a slim notice at the top with the time it frees up — before you fill in a form, not after a failed run.</li></ul>
+<h2>What you can do</h2>
+<ul class="sub mt"><li><b>Add another key.</b> Each key has its own limits; two or three keys from different Google accounts make busy messages rare. See <a href="how-to-add-your-free-gemini-key.html">how to add your free Gemini key</a>.</li><li><b>Test, don't guess.</b> The <b>Test my key</b> button in <a href="../settings.html">Settings</a> shows each kind — text, image, voice — as Working, Resting-until, or the real error.</li><li><b>Check the activity log.</b> Settings keeps the last 20 real errors with Google's own message, so a failure is never a mystery.</li><li><b>Wait out the right clock.</b> Per-minute: a minute. Per-day: tomorrow — or another key, right now.</li></ul>
+<h2>FAQ</h2><div class="faq"><b>Is the free limit per tool or per key?</b><p>Per key and per model, on Google's side. Every tool using the same key shares the same allowance — which is why a second key helps every tool at once.</p></div><div class="faq"><b>A tool said "resting until 4:32 PM" — what does that mean?</b><p>Google paused that model on that key after a limit hit. The tool will not waste calls on it until then; other models and keys keep working meanwhile.</p></div><div class="faq"><b>Will paying remove the limits?</b><p>Paid Gemini tiers raise the limits a lot, but StreamClip AI is built for the free tier — with two or three free keys rotated, most creators never need more.</p></div>
+<div class="note mt2"><div><b>Try it free</b><div class="small dim">Manage your keys on the <a href="../settings.html">Settings page</a> — add keys, test them, and see the activity log of real errors.</div></div></div>
+</div>
+<footer class="site-foot">
+<div class="in">
+<div class="cols"><div><h4>Creator tools</h4><a href="../tools/stream-clipper.html">Stream Clipper</a><a href="../tools/thumbnail-creator.html">Thumbnail Creator</a><a href="../tools/upload-video.html">Upload Your Own Video</a><a href="../tools/caption-translation.html">Caption Translation</a><a href="../tools/hooks-title-generator.html">Hooks + Title Generator</a><a href="../tools/your-branding.html">Your Own Branding</a><a href="../tools/podcast-clipper.html">Podcast Clipper</a><a href="../tools/script-to-short.html">Script-to-Short</a><a href="../tools/score-my-short.html">Score My Short</a><a href="../tools/repurpose-pack.html">Repurpose Pack</a><a href="../tools/auto-captions.html">Auto Captions</a><a href="../tools/dub-maker.html">Urdu/Hindi Dub Maker</a><a href="../tools/profile-picture-maker.html">Profile Picture Maker</a></div><div><h4>Student Mode</h4><a href="../tools/lecture-clips.html">Lecture to Revision Clips</a><a href="../tools/lecture-notes.html">Lecture to Notes</a><a href="../tools/flashcards-quiz.html">Flashcards + Quiz</a><a href="../tools/presentation-maker.html">Video Presentation Maker</a><a href="../tools/exam-prep.html">Exam Prep — Questions &amp; Ask</a><a href="../tools/mock-test.html">Mock Test</a><a href="../tools/handwritten-notes.html">Handwritten Notes</a><a href="../tools/assignment-builder.html">Assignment Builder</a></div><div><h4>Site</h4><a href="../index.html">Home</a><a href="../live-now.html">Live Now</a><a href="../blog/">Blog</a><a href="../settings.html">Settings — Add your Gemini key</a><a href="../about.html">About</a><a href="../privacy.html">Privacy Policy</a><a href="../terms.html">Terms</a><a href="../contact.html">Contact</a></div></div>
+<p class="small dim">StreamClip AI — free tools that run in your browser with your own Gemini key. Your videos, keys and files stay on your device. Clip only content you own or have permission to use, and respect the creators and platform rules.</p>
+<p class="small dim">© 2026 StreamClip AI</p>
+</div>
+</footer>
+<script type="module" src="../js/site.js"></script>
+</body></html>
